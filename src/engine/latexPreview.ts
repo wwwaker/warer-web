@@ -64,6 +64,30 @@ function tokenize(input: string): Token[] {
   return tokens;
 }
 
+function insertImplicitMultiplication(tokens: Token[]): Token[] {
+  if (tokens.length <= 1) return tokens;
+
+  const result: Token[] = [tokens[0]];
+
+  for (let i = 1; i < tokens.length; i++) {
+    const prev = tokens[i - 1];
+    const cur = tokens[i];
+
+    const needMul =
+      (prev.type === 'number' && (cur.type === 'variable' || cur.type === 'lparen' || cur.type === 'func')) ||
+      (prev.type === 'rparen' && (cur.type === 'variable' || cur.type === 'number' || cur.type === 'lparen' || cur.type === 'func')) ||
+      (prev.type === 'variable' && (cur.type === 'lparen' || cur.type === 'number' || cur.type === 'func'));
+
+    if (needMul) {
+      result.push({ type: 'operator', value: '\\cdot ' });
+    }
+
+    result.push(cur);
+  }
+
+  return result;
+}
+
 class Parser {
   private tokens: Token[];
   private pos: number;
@@ -234,8 +258,9 @@ class Parser {
 export function inputToLatex(input: string): string {
   if (!input.trim()) return '';
   try {
-    const tokens = tokenize(input);
-    if (tokens.length === 0) return '';
+    const rawTokens = tokenize(input);
+    if (rawTokens.length === 0) return '';
+    const tokens = insertImplicitMultiplication(rawTokens);
     const parser = new Parser(tokens);
     return parser.parse();
   } catch {

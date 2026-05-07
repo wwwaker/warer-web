@@ -11,6 +11,12 @@ const SYMBOLIC_VAR = /\b([a-zA-Z])\b(?!\s*\()/;
 
 const LOCAL_CONSTANTS = new Set(['e', 'pi', 'E', 'PI']);
 
+const KNOWN_FUNCS = new Set([
+  'sin', 'cos', 'tan', 'asin', 'acos', 'atan',
+  'sinh', 'cosh', 'tanh', 'ln', 'log', 'exp', 'sqrt',
+  'abs', 'ceil', 'floor', 'round',
+]);
+
 export function needsCloud(input: string): boolean {
   if (CLOUD_KEYWORDS.test(input)) return true;
   if (SYMBOLIC_VAR.test(input)) {
@@ -21,6 +27,60 @@ export function needsCloud(input: string): boolean {
   return false;
 }
 
+function preprocessImplicitMultiplication(input: string): string {
+  const tokens: { type: 'func' | 'var' | 'num' | 'op' | 'lparen' | 'rparen'; value: string }[] = [];
+  let i = 0;
+  const s = input;
+
+  while (i < s.length) {
+    const ch = s[i];
+
+    if (/[0-9.]/.test(ch)) {
+      let num = '';
+      while (i < s.length && /[0-9.]/.test(s[i])) { num += s[i++]; }
+      tokens.push({ type: 'num', value: num });
+      continue;
+    }
+
+    if (/[a-zA-Z]/.test(ch)) {
+      let name = '';
+      while (i < s.length && /[a-zA-Z]/.test(s[i])) { name += s[i++]; }
+      if (KNOWN_FUNCS.has(name)) {
+        tokens.push({ type: 'func', value: name });
+      } else if (name === 'pi') {
+        tokens.push({ type: 'var', value: 'pi' });
+      } else if (name === 'e') {
+        tokens.push({ type: 'var', value: 'e' });
+      } else {
+        tokens.push({ type: 'var', value: name });
+      }
+      continue;
+    }
+
+    if (ch === '(') { tokens.push({ type: 'lparen', value: '(' }); i++; continue; }
+    if (ch === ')') { tokens.push({ type: 'rparen', value: ')' }); i++; continue; }
+    tokens.push({ type: 'op', value: ch }); i++;
+  }
+
+  const result: string[] = [];
+  for (let j = 0; j < tokens.length; j++) {
+    const cur = tokens[j];
+    const prev = j > 0 ? tokens[j - 1] : null;
+
+    if (prev) {
+      const needMul =
+        (prev.type === 'num' && (cur.type === 'var' || cur.type === 'lparen' || cur.type === 'func')) ||
+        (prev.type === 'rparen' && (cur.type === 'var' || cur.type === 'num' || cur.type === 'lparen' || cur.type === 'func')) ||
+        (prev.type === 'var' && (cur.type === 'lparen' || cur.type === 'num' || cur.type === 'func'));
+      if (needMul) result.push('*');
+    }
+
+    result.push(cur.value);
+  }
+
+  return result.join('');
+}
+
 export function computeLocal(input: string): LocalResult | null {
   try {
     const preprocessed = input
@@ -29,7 +89,9 @@ export function computeLocal(input: string): LocalResult | null {
       .replace(/\bln\b/gi, 'log')
       .replace(/π/g, 'pi');
 
-    const result = evaluate(preprocessed);
+    const withImplicitMul = preprocessImplicitMultiplication(preprocessed);
+
+    const result = evaluate(withImplicitMul);
 
     if (typeof result === 'number' && isFinite(result)) {
       return {

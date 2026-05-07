@@ -54,12 +54,12 @@ interface Props {
 }
 
 export default function Keyboard({ tabId }: Props) {
-  const { appendInput, backspace, clearInput, compute } = useCalculator();
+  const { appendInput, backspace, clearInput, compute, cursorPosition } = useCalculator();
 
   const handleKey = (value: string) => {
     switch (value) {
       case 'BACKSPACE':
-        backspace(tabId);
+        backspace(tabId, cursorPosition);
         break;
       case 'CLEAR':
         clearInput(tabId);
@@ -68,7 +68,7 @@ export default function Keyboard({ tabId }: Props) {
         compute(tabId);
         break;
       default:
-        appendInput(tabId, value);
+        appendInput(tabId, value, cursorPosition);
     }
   };
 

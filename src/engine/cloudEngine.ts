@@ -1,4 +1,4 @@
-const API_BASE = '';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
 export interface CloudRequest {
   payload: {
@@ -33,7 +33,7 @@ export interface CloudResponse {
   error: CloudError | null;
 }
 
-export async function computeCloud(expression: string): Promise<CloudResponse> {
+export async function computeCloud(expression: string, signal?: AbortSignal): Promise<CloudResponse> {
   const body: CloudRequest = {
     payload: {
       expression,
@@ -50,6 +50,7 @@ export async function computeCloud(expression: string): Promise<CloudResponse> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal,
   });
 
   return res.json();

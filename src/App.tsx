@@ -90,7 +90,7 @@ function CardContent({ card }: { card: Card }) {
       </div>
     );
   }
-  if (card.type === 'graph') return <GraphTab card={card} />;
+  if (card.type === 'graph') return <GraphTab key={card.id} card={card} />;
   if (card.type === 'history') return <HistoryTab tab={card} />;
   return null;
 }
@@ -167,7 +167,7 @@ function ColumnView({ column }: { column: Column }) {
   };
 
   return (
-    <div className="column" style={{ flex: column.flex }} onDragOver={handleDragOver} onDrop={handleDrop}>
+    <div className="column" onDragOver={handleDragOver} onDrop={handleDrop}>
       <div className="column-tabs">
         {colCards.map((card) => (
           <CardTab key={card.id} card={card} columnId={column.id} isActive={card.id === (activeCard?.id)} />
@@ -192,7 +192,7 @@ function App() {
   const { columns, isFullscreen, addColumn, toggleFullscreen } = useCalculator();
 
   return (
-    <div className={`app${isFullscreen ? ' fullscreen' : ''}`}>
+    <div className="app">
       <header className="app-header">
         <div className="app-header-left">
           <h1>warer</h1>
@@ -205,9 +205,6 @@ function App() {
               <span className="btn-label">添加栏</span>
             </button>
           )}
-          <button className="header-btn" onClick={toggleFullscreen} title={isFullscreen ? '退出全屏' : '全屏模式'}>
-            {isFullscreen ? '⤓' : '⤢'}
-          </button>
         </div>
       </header>
 

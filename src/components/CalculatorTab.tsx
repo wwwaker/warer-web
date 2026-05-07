@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useCallback, useLayoutEffect } from 'react';
 import { useCalculator, type Card } from '../store/calculatorStore';
 import KatexRenderer from './KatexRenderer';
 import { inputToLatex } from '../engine/latexPreview';
@@ -19,39 +19,101 @@ function checkBracketMismatch(input: string): { fixed: string; hint: string } | 
   return null;
 }
 
+function preprocessExprForPlot(input: string): string {
+  let expr = input.replace(/^y\s*=\s*/i, '').trim();
+  expr = expr.replace(/\bln\b/gi, 'log');
+  expr = expr.replace(/\bpi\b/gi, 'pi');
+  expr = expr.replace(/\^/g, '^');
+  return expr;
+}
+
 interface Props {
   card: Card;
 }
 
 export default function CalculatorTab({ card }: Props) {
-  const { setInput, compute, addGraphFn } = useCalculator();
+  const { setInput, compute, addGraphFn, cursorPosition, setCursorPosition, navigateHistory } = useCalculator();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const prevCursorRef = useRef<number | null>(null);
+
+  const syncCursor = useCallback(() => {
+    const el = inputRef.current;
+    if (el) setCursorPosition(el.selectionStart ?? null);
+  }, [setCursorPosition]);
+
+  useLayoutEffect(() => {
+    if (cursorPosition !== null && cursorPosition !== prevCursorRef.current && inputRef.current) {
+      const pos = Math.min(cursorPosition, inputRef.current.value.length);
+      inputRef.current.setSelectionRange(pos, pos);
+    }
+    prevCursorRef.current = cursorPosition;
+  }, [cursorPosition]);
 
   const previewLatex = useMemo(() => inputToLatex(card.input), [card.input]);
 
   const bracketHint = useMemo(() => checkBracketMismatch(card.input), [card.input]);
 
-  const canPlot =
-    card.output &&
-    !card.output.error &&
-    card.output.isSymbolic &&
-    card.output.variables.length > 0;
+  const canPlot = useMemo(() => {
+    if (!card.input.trim()) return false;
+    const cleaned = card.input.replace(/^y\s*=\s*/i, '').trim();
+    return /[a-zA-Z]/.test(cleaned);
+  }, [card.input]);
 
   const handlePlot = () => {
-    const cleanExpr = card.input.replace(/^y\s*=\s*/i, '').trim();
-    const { cards, columns, setActiveCard } = useCalculator.getState();
-    let graphCard = cards.find((c) => c.type === 'graph');
+    const cleanExpr = preprocessExprForPlot(card.input);
+    if (!cleanExpr) return;
 
-    if (!graphCard) {
-      const newId = useCalculator.getState().addCard('graph');
-      graphCard = useCalculator.getState().cards.find((c) => c.id === newId);
+    const { cards, columns, activeCardId, setActiveCard } = useCalculator.getState();
+
+    const getVisibleCard = (col: { cardIds: string[] }) => {
+      const colCards = col.cardIds.map(id => cards.find(c => c.id === id)).filter(Boolean) as Card[];
+      return colCards.find(c => c.id === activeCardId) ?? colCards[0];
+    };
+
+    for (const col of columns) {
+      const visible = getVisibleCard(col);
+      if (visible?.type === 'graph') {
+        addGraphFn(visible.id, cleanExpr);
+        setActiveCard(visible.id);
+        return;
+      }
     }
 
-    if (graphCard) {
-      addGraphFn(graphCard.id, cleanExpr);
-      const graphCol = columns.find((c) => c.cardIds.includes(graphCard!.id));
-      if (graphCol) {
-        setActiveCard(graphCard.id);
+    const currentCol = columns.find((col) => col.cardIds.includes(card.id));
+    if (currentCol) {
+      const graphInCol = cards.find(
+        (c) => c.type === 'graph' && currentCol.cardIds.includes(c.id)
+      );
+      if (graphInCol) {
+        addGraphFn(graphInCol.id, cleanExpr);
+        setActiveCard(graphInCol.id);
+        return;
       }
+    }
+
+    const anyGraph = cards.find((c) => c.type === 'graph');
+    if (anyGraph) {
+      addGraphFn(anyGraph.id, cleanExpr);
+      setActiveCard(anyGraph.id);
+      return;
+    }
+
+    const targetCol = currentCol ?? columns[0];
+    if (targetCol) {
+      const newId = useCalculator.getState().addCard('graph', targetCol.id);
+      addGraphFn(newId, cleanExpr);
+      setActiveCard(newId);
+    }
+  };
+
+  const errorPosition = card.output?.error && card.output.errorPosition != null ? card.output.errorPosition : null;
+
+  const handleErrorClick = () => {
+    if (errorPosition !== null && inputRef.current) {
+      const pos = Math.min(errorPosition, card.input.length);
+      inputRef.current.focus();
+      inputRef.current.setSelectionRange(pos, pos + 1);
+      setCursorPosition(pos);
     }
   };
 
@@ -66,21 +128,37 @@ export default function CalculatorTab({ card }: Props) {
       <div className="display">
         <div className="display-input">
           <input
+            ref={inputRef}
             type="text"
             value={card.input}
             onChange={(e) => setInput(card.id, e.target.value)}
+            onSelect={syncCursor}
+            onClick={syncCursor}
+            onKeyUp={syncCursor}
             onKeyDown={(e) => {
               if (e.key === 'Enter') compute(card.id);
+              if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                navigateHistory('prev');
+              }
+              if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                navigateHistory('next');
+              }
+              setTimeout(syncCursor, 0);
             }}
             placeholder="输入表达式..."
             autoFocus
             spellCheck={false}
             autoComplete="off"
           />
+          {canPlot && (
+            <button className="plot-inline-btn" onClick={handlePlot} title="绘制函数图像">📈</button>
+          )}
         </div>
         {bracketHint && (
           <div className="bracket-hint" onClick={handleAutoFix}>
-            ⚠️ {bracketHint.hint} <span className="bracket-hint-action">点击修复</span>
+            ⚠️ {bracketHint.hint}
           </div>
         )}
       </div>
@@ -101,7 +179,12 @@ export default function CalculatorTab({ card }: Props) {
           <div className="result-box">
             {card.computing && <div className="computing">计算中...</div>}
             {!card.computing && card.output?.error && (
-              <div className="result-error">{card.output.error}</div>
+              <div className="result-error" onClick={errorPosition !== null ? handleErrorClick : undefined}>
+                {card.output.error}
+                {errorPosition !== null && (
+                  <span className="error-position-hint"> (位置 {errorPosition}，点击定位)</span>
+                )}
+              </div>
             )}
             {!card.computing && card.output && !card.output.error && (
               <>
@@ -121,11 +204,6 @@ export default function CalculatorTab({ card }: Props) {
               <div className="result-placeholder">按 = 计算</div>
             )}
           </div>
-          {canPlot && (
-            <button className="plot-btn" onClick={handlePlot}>
-              📈 绘制函数图像
-            </button>
-          )}
         </div>
       </div>
     </div>
