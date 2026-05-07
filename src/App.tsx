@@ -195,8 +195,8 @@ function App() {
     <div className={`app${isFullscreen ? ' fullscreen' : ''}`}>
       <header className="app-header">
         <div className="app-header-left">
-          <h1>MathWaker</h1>
-          <span className="header-badge">v0.5</span>
+          <h1>warer</h1>
+          <span className="header-badge">v0.1.0</span>
         </div>
         <div className="header-actions">
           {columns.length < 3 && (
