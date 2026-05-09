@@ -7,11 +7,11 @@ import Keyboard from './components/Keyboard';
 import './App.css';
 
 function CardTab({ card, columnId, isActive }: { card: Card; columnId: string; isActive: boolean }) {
-  const { renameCard, removeCard, setActiveCard, setDragState, moveCard, columns } = useCalculator();
+  const { renameCard, removeCard, setActiveCard, setDragState, moveCard } = useCalculator();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
-  const col = columns.find((c) => c.id === columnId);
+  const col = useCalculator((state) => state.columns.find((c) => c.id === columnId));
   const canClose = col && col.cardIds.length > 1;
   const icon = card.type === 'calculator' ? '🔢' : card.type === 'graph' ? '📈' : '📋';
 
@@ -41,11 +41,12 @@ function CardTab({ card, columnId, isActive }: { card: Card; columnId: string; i
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const dragState = useCalculator.getState().dragState;
+    const state = useCalculator.getState();
+    const dragState = state.dragState;
     if (!dragState || dragState.cardId === card.id) return;
     const targetIdx = col?.cardIds.indexOf(card.id) ?? 0;
-    moveCard(dragState.cardId, dragState.fromColumnId, columnId, targetIdx);
-    setDragState(null);
+    state.moveCard(dragState.cardId, dragState.fromColumnId, columnId, targetIdx);
+    state.setDragState(null);
   };
 
   return (
@@ -148,7 +149,8 @@ function ColumnDivider({ leftIdx }: { leftIdx: number }) {
 }
 
 function ColumnView({ column }: { column: Column }) {
-  const { cards, activeCardId, addCard, removeColumn, columns } = useCalculator();
+  const { cards, activeCardId, addCard, removeColumn } = useCalculator();
+  const columns = useCalculator((state) => state.columns);
   const colCards = column.cardIds.map((id) => cards.find((c) => c.id === id)).filter(Boolean) as Card[];
   const activeCard = colCards.find((c) => c.id === activeCardId) ?? colCards[0];
 
@@ -159,11 +161,11 @@ function ColumnView({ column }: { column: Column }) {
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const dragState = useCalculator.getState().dragState;
+    const state = useCalculator.getState();
+    const dragState = state.dragState;
     if (!dragState) return;
-    const { moveCard, setDragState } = useCalculator.getState();
-    moveCard(dragState.cardId, dragState.fromColumnId, column.id, column.cardIds.length);
-    setDragState(null);
+    state.moveCard(dragState.cardId, dragState.fromColumnId, column.id, column.cardIds.length);
+    state.setDragState(null);
   };
 
   return (
@@ -189,7 +191,7 @@ function ColumnView({ column }: { column: Column }) {
 }
 
 function App() {
-  const { columns, isFullscreen, addColumn, toggleFullscreen } = useCalculator();
+  const { columns, isFullscreen, addColumn } = useCalculator();
 
   return (
     <div className="app">

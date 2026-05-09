@@ -41,6 +41,8 @@ function tokenize(input: string): Token[] {
         tokens.push({ type: 'func', value: name });
       } else if (name === 'pi') {
         tokens.push({ type: 'variable', value: '\\pi' });
+      } else if (name === 'i' || name === 'j') {
+        tokens.push({ type: 'variable', value: 'i' });
       } else if (name === 'e' && (i >= s.length || !/[a-zA-Z]/.test(s[i]))) {
         tokens.push({ type: 'variable', value: 'e' });
       } else {
@@ -129,22 +131,23 @@ class Parser {
   }
 
   private parseTerm(): string {
-    const parts: string[] = [];
-    parts.push(this.parsePower());
+    let result = this.parsePower();
 
-    while (this.peekOpValue() === '\\cdot ') {
-      this.advance();
-      const right = this.parsePower();
-      parts.push(` \\cdot ${right}`);
+    while (true) {
+      if (this.peekOpValue() === '\\cdot ') {
+        this.advance();
+        const right = this.parsePower();
+        result = `${result} \\cdot ${right}`;
+      } else if (this.peek()?.type === 'slash') {
+        this.advance();
+        const denominator = this.parsePower();
+        result = `\\frac{${result}}{${denominator}}`;
+      } else {
+        break;
+      }
     }
 
-    if (this.peek()?.type === 'slash') {
-      this.advance();
-      const right = this.parsePower();
-      return `\\frac{${parts.join('')}}{${right}}`;
-    }
-
-    return parts.join('');
+    return result;
   }
 
   private parsePower(): string {
@@ -153,6 +156,18 @@ class Parser {
     if (this.peek()?.type === 'caret') {
       this.advance();
       const exp = this.parsePower();
+      
+      // 如果 base 已经是 \left(...\right) 形式，将指数放在前面
+      if (base.includes('\\left(') && base.includes('\\right)')) {
+        // 提取函数名和参数
+        const match = base.match(/^(\\\w+)\\left\((.+)\\right\)$/);
+        if (match) {
+          const funcName = match[1];
+          const args = match[2];
+          return `${funcName}^{${exp}}{\\left(${args}\\right)}`;
+        }
+      }
+      
       return `${base}^{${exp}}`;
     }
 

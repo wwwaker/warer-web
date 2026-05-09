@@ -303,11 +303,13 @@ export default function GraphTab({ card }: Props) {
     const errors: string[] = [];
 
     const visibleFns = card.graphFunctions.filter((fn) => !fn.hidden);
-    if (card.graphFunctions.length > 0 && visibleFns.length === 0) {
+    if (card.graphFunctions.length === 0) {
+      // 没有函数时已经清空了容器，直接返回
+      return;
+    }
+    if (visibleFns.length === 0) {
       // 即使没有可见函数，也渲染坐标轴
       data.push({ fn: '0', color: '#ccc', graphType: 'polyline', closed: false, nSamples: 2 });
-    } else if (visibleFns.length === 0) {
-      return;
     }
 
     for (const fn of visibleFns) {
@@ -660,7 +662,7 @@ export default function GraphTab({ card }: Props) {
         className={`graph-canvas${isGraphFullscreen ? ' fullscreen' : ''}`}
       >
         {card.graphFunctions.length === 0 ? (
-          <div className="graph-empty">
+          <div key="empty" className="graph-empty">
             <div className="graph-empty-icon">📈</div>
             <div className="graph-empty-text">在上方输入函数表达式添加图像</div>
             <div className="graph-examples">
@@ -676,7 +678,7 @@ export default function GraphTab({ card }: Props) {
             </div>
           </div>
         ) : (
-          <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+          <div key="plot" ref={containerRef} style={{ width: '100%', height: '100%' }} />
         )}
         {renderError && (
           <div className="graph-error-overlay">

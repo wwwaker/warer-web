@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useCalculator } from '../store/calculatorStore';
 
 const KEYS: { label: string; value: string; span?: number; cls?: string }[][] = [
@@ -55,8 +56,14 @@ interface Props {
 
 export default function Keyboard({ tabId }: Props) {
   const { appendInput, backspace, clearInput, compute, cursorPosition } = useCalculator();
+  const [activeKey, setActiveKey] = useState<string | null>(null);
 
   const handleKey = (value: string) => {
+    // 1.2 触控反馈优化
+    if (navigator.vibrate) navigator.vibrate(5);
+    setActiveKey(value);
+    setTimeout(() => setActiveKey(null), 100);
+
     switch (value) {
       case 'BACKSPACE':
         backspace(tabId, cursorPosition);
@@ -79,7 +86,7 @@ export default function Keyboard({ tabId }: Props) {
           {row.map((k) => (
             <button
               key={k.value + k.label}
-              className={`key ${k.cls ?? ''}`}
+              className={`key ${k.cls ?? ''}${activeKey === k.value ? ' active-state' : ''}`}
               style={k.span ? { gridColumn: `span ${k.span}` } : undefined}
               onClick={() => handleKey(k.value)}
               aria-label={k.label}

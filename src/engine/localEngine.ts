@@ -17,6 +17,72 @@ const KNOWN_FUNCS = new Set([
   'abs', 'ceil', 'floor', 'round',
 ]);
 
+/**
+ * 智能舍入浮点数，将接近常见分数或整数的值转换为更友好的形式
+ */
+function smartRound(value: number, tolerance: number = 1e-10): string {
+  // 首先检查是否接近整数
+  const nearestInt = Math.round(value);
+  if (Math.abs(value - nearestInt) < tolerance) {
+    return String(nearestInt);
+  }
+  
+  // 常见分数列表
+  const commonFractions = [
+    [0, 1],
+    [1, 6], [1, 4], [1, 3], [1, 2], [2, 3], [3, 4], [5, 6],
+    [1, 8], [3, 8], [5, 8], [7, 8],
+    [1, 12], [5, 12], [7, 12], [11, 12],
+  ];
+  
+  // 检查是否接近常见分数
+  for (const [num, den] of commonFractions) {
+    const fractionValue = num / den;
+    if (Math.abs(value - fractionValue) < tolerance) {
+      if (num === 0) return "0";
+      if (den === 1) return String(num);
+      return `${num}/${den}`;
+    }
+    // 也检查负数
+    if (Math.abs(value + fractionValue) < tolerance) {
+      if (num === 0) return "0";
+      if (den === 1) return String(-num);
+      return `-${num}/${den}`;
+    }
+  }
+  
+  // 尝试找到最接近的简单分数
+  try {
+    // 使用连分数算法找到最佳近似
+    let bestNum = 1;
+    let bestDen = 1;
+    let bestError = Math.abs(value - Math.round(value));
+    
+    for (let den = 2; den <= 20; den++) {
+      const num = Math.round(value * den);
+      const error = Math.abs(value - num / den);
+      if (error < bestError) {
+        bestError = error;
+        bestNum = num;
+        bestDen = den;
+      }
+    }
+    
+    // 如果找到的分数足够接近，使用它
+    if (bestError < tolerance * 100 && bestDen <= 20) {
+      if (bestDen === 1) return String(bestNum);
+      return `${bestNum}/${bestDen}`;
+    }
+  } catch {
+    // 忽略错误，使用默认格式化
+  }
+  
+  // 如果都不匹配，返回保留适当小数位的字符串
+  // 移除尾随零
+  const formatted = value.toFixed(10).replace(/\.?0+$/, '');
+  return formatted;
+}
+
 export function needsCloud(input: string): boolean {
   if (CLOUD_KEYWORDS.test(input)) return true;
   if (SYMBOLIC_VAR.test(input)) {
@@ -94,9 +160,11 @@ export function computeLocal(input: string): LocalResult | null {
     const result = evaluate(withImplicitMul);
 
     if (typeof result === 'number' && isFinite(result)) {
+      // 使用智能舍入来改善显示效果
+      const roundedText = smartRound(result);
       return {
         numeric_value: result,
-        plain_text: String(result),
+        plain_text: roundedText,
         is_symbolic: false,
       };
     }
