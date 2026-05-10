@@ -205,6 +205,28 @@ body {
 .plot-inline-btn:hover { background: var(--accent); color: white; opacity: 1; }
 .display-input input { padding-right: 40px; }
 
+/* ===== Template Panel ===== */
+.template-panel { flex-shrink: 0; }
+.template-toggle {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text-secondary); cursor: pointer;
+  font-size: 12px; font-weight: 500; transition: all var(--transition);
+}
+.template-toggle:hover { background: var(--surface-hover); color: var(--text); border-color: var(--accent); }
+.template-toggle-icon { font-size: 10px; color: var(--text-dim); }
+.template-grid {
+  display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 4px;
+}
+.template-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 6px 12px; border: 1px solid var(--border-light); border-radius: var(--radius-xs);
+  background: var(--surface); cursor: pointer; transition: all var(--transition); flex: 1; min-width: 80px;
+}
+.template-btn:hover { background: var(--accent-light); border-color: var(--accent); }
+.template-label { font-size: 13px; font-weight: 600; color: var(--text); }
+.template-desc { font-size: 10px; color: var(--text-dim); white-space: nowrap; }
+
 /* Calculator body: two side-by-side panels */
 .calc-body { display: flex; gap: 10px; flex: 1; min-height: 0; }
 
@@ -262,6 +284,15 @@ body {
 /* ===== Graph Tab ===== */
 .graph-tab { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
 .graph-toolbar { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--border-light); background: var(--surface); flex-shrink: 0; align-items: center; flex-wrap: wrap; }
+.graph-mode-selector { display: flex; gap: 2px; flex-shrink: 0; }
+.graph-mode-btn { padding: 4px 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-dim); font-size: 11px; font-weight: 500; cursor: pointer; transition: all var(--transition); }
+.graph-mode-btn:first-child { border-radius: var(--radius-xs) 0 0 var(--radius-xs); }
+.graph-mode-btn:last-child { border-radius: 0 var(--radius-xs) var(--radius-xs) 0; }
+.graph-mode-btn:not(:last-child) { border-right: none; }
+.graph-mode-btn:hover { background: var(--surface-hover); color: var(--text-secondary); }
+.graph-mode-btn.active { background: var(--accent-light); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+.graph-param-inputs { display: flex; flex: 1; gap: 4px; align-items: center; min-width: 200px; }
+.graph-param-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); white-space: nowrap; font-family: 'JetBrains Mono', monospace; }
 .graph-input { flex: 1; min-width: 120px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-xs); font-size: 13px; font-family: 'JetBrains Mono', monospace; color: var(--text); background: var(--bg); outline: none; }
 .graph-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
 .graph-input::placeholder { color: var(--text-dim); font-family: system-ui; font-size: 12px; }
@@ -293,6 +324,7 @@ body {
 .graph-fn-color-opt.active { border-color: var(--text); box-shadow: 0 0 0 2px var(--surface); }
 .graph-fn-expr { cursor: pointer; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .graph-fn-expr:hover { text-decoration: underline; text-decoration-style: dotted; }
+.graph-fn-type-badge { font-size: 9px; padding: 0 5px; border-radius: 4px; background: var(--accent-light); color: var(--accent); font-weight: 700; margin-right: 2px; }
 .graph-fn-edit-input { width: 100px; padding: 1px 4px; border: 1px solid var(--accent); border-radius: 3px; font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text); background: var(--surface); outline: none; }
 .graph-fn-toggle { width: 16px; height: 16px; border: none; border-radius: 50%; background: transparent; color: var(--text-dim); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 10px; line-height: 1; padding: 0; transition: all var(--transition); }
 .graph-fn-toggle:hover { background: var(--accent-light); color: var(--accent); }

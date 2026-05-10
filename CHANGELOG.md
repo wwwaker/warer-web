@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.2.0]
+
+### Features
+
+- **backend**: 新增 `solve()` 解方程命令，支持多项式和超越方程
+- **graph**: 新增极坐标/参数方程/隐式方程三种绘图模式，每函数独立类型支持混合绘制
+- **graph**: 新增极坐标网格 SVG 叠加（支持缩放/平移追踪）
+- **graph**: FnTag 显示类型徽章（y/r/P/f）
+- **calculator**: 新增常用数学模板面板（求根/求导/积分/化简等）
+- **calculator**: 计算器→图像路由支持显式表示法（`y()`/`r()`/`t()`/`f()`）+ 智能检测
+- **engine**: 新增 `graphDetection.ts` 共享方程类型检测工具
+- **keyboard**: 替换 `simp` 为 `θ`，新增 `t` 按钮
+
+### Fixes
+
+- **graph**: 修复隐式方程使用错误 `graphType`（`polyline`→`interval`）导致绘制失败
+- **graph**: 修复极坐标 `r=` 前缀未剥离导致的解析错误
+- **graph**: 极坐标默认范围从 `[-π, π]` 扩至 `[-4π, 4π]` 使螺旋线可见
+- **graph**: 切换绘图模式不再清空已添加函数
+- **backend**: 增加 30s 计算超时防止卡死
+- **backend**: 嵌套命令（如 `diff(solve(...))`）返回清晰错误信息
+
+### Refactor
+
+- **graph**: 移除 Card 级别 `graphMode`，每 `GraphFn` 携带独立 `fnType`
+
 ## [v0.1.2]
 
 ### Features

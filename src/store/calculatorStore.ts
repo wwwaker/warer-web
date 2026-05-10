@@ -3,9 +3,14 @@ import { dispatch, type ComputeOutput } from '../engine/dispatcher';
 
 export type CardType = 'calculator' | 'graph' | 'history';
 
+export type GraphMode = 'linear' | 'polar' | 'parametric' | 'implicit';
+
 export interface GraphFn {
   id: string;
-  expr: string;
+  fnType: GraphMode;
+  expr: string;       // linear: y=f(x), polar: r=f(θ), implicit: f(x,y)=0
+  xExpr: string;      // parametric: x = f(t)
+  yExpr: string;      // parametric: y = g(t)
   color: string;
   hidden: boolean;
 }
@@ -92,7 +97,7 @@ interface CalculatorState {
   backspace: (id: string, cursorPos?: number | null) => void;
   clearInput: (id: string) => void;
   compute: (id: string) => Promise<void>;
-  addGraphFn: (cardId: string, expr: string) => void;
+  addGraphFn: (cardId: string, expr: string, fnType?: GraphMode, xExpr?: string, yExpr?: string) => void;
   removeGraphFn: (cardId: string, fnId: string) => void;
   clearGraphFns: (cardId: string) => void;
   updateGraphFn: (cardId: string, fnId: string, updates: Partial<Pick<GraphFn, 'expr' | 'color' | 'hidden'>>) => void;
@@ -358,10 +363,8 @@ export const useCalculator = create<CalculatorState>((set, get) => ({
     }));
   },
 
-  addGraphFn: (cardId, expr) => {
+  addGraphFn: (cardId, expr, fnType, xExpr, yExpr) => {
     if (!expr.trim()) return;
-    const cleanExpr = expr.replace(/^y\s*=\s*/i, '').trim();
-    if (!cleanExpr) return;
     set((s) => ({
       cards: s.cards.map((c) => {
         if (c.id !== cardId) return c;
@@ -369,7 +372,7 @@ export const useCalculator = create<CalculatorState>((set, get) => ({
         const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         return {
           ...c,
-          graphFunctions: [...c.graphFunctions, { id, expr: cleanExpr, color, hidden: false }],
+          graphFunctions: [...c.graphFunctions, { id, fnType: fnType ?? 'linear', expr, xExpr: xExpr ?? '', yExpr: yExpr ?? '', color, hidden: false }],
         };
       }),
     }));

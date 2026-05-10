@@ -1,5 +1,6 @@
-import { useMemo, useRef, useCallback, useLayoutEffect } from 'react';
+import { useMemo, useRef, useCallback, useLayoutEffect, useState } from 'react';
 import { useCalculator, type Card } from '../store/calculatorStore';
+import { detectGraphFnType } from '../engine/graphDetection';
 import KatexRenderer from './KatexRenderer';
 import { inputToLatex } from '../engine/latexPreview';
 
@@ -20,7 +21,7 @@ function checkBracketMismatch(input: string): { fixed: string; hint: string } | 
 }
 
 function preprocessExprForPlot(input: string): string {
-  let expr = input.replace(/^y\s*=\s*/i, '').trim();
+  let expr = input.replace(/^\s*(?:[yY]\s*=\s*|[rR]\s*=\s*)\s*/i, '').trim();
   expr = expr.replace(/\bln\b/gi, 'log');
   expr = expr.replace(/\bpi\b/gi, 'pi');
   expr = expr.replace(/\^/g, '^');
@@ -35,6 +36,16 @@ export default function CalculatorTab({ card }: Props) {
   const { setInput, compute, addGraphFn, cursorPosition, setCursorPosition, navigateHistory } = useCalculator();
   const inputRef = useRef<HTMLInputElement>(null);
   const prevCursorRef = useRef<number | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
+
+  const TEMPLATES = [
+    { label: '求根', expr: 'solve(x^2 - 4, x)', desc: '解一元二次方程' },
+    { label: '求导', expr: 'diff(x^3 + 2*x, x)', desc: '计算多项式导数' },
+    { label: '积分', expr: 'integrate(x^2, x)', desc: '计算不定积分' },
+    { label: '化简', expr: 'simplify(cos(x)^2 + sin(x)^2)', desc: '三角恒等式化简' },
+    { label: '解方程', expr: 'solve(x^2 - 3*x + 2, x)', desc: '因式分解求根' },
+    { label: '对数求导', expr: 'diff(ln(x), x)', desc: '自然对数求导' },
+  ];
 
   const syncCursor = useCallback(() => {
     const el = inputRef.current;
@@ -60,10 +71,14 @@ export default function CalculatorTab({ card }: Props) {
   }, [card.input]);
 
   const handlePlot = () => {
-    const cleanExpr = preprocessExprForPlot(card.input);
+    const rawExpr = card.input;
+    if (!rawExpr.trim()) return;
+    const detection = detectGraphFnType(rawExpr);
+    const cleanExpr = preprocessExprForPlot(detection.expr);
     if (!cleanExpr) return;
 
     const { cards, columns, activeCardId, setActiveCard } = useCalculator.getState();
+    const targetFnType = detection.type;
 
     const getVisibleCard = (col: { cardIds: string[] }) => {
       const colCards = col.cardIds.map(id => cards.find(c => c.id === id)).filter(Boolean) as Card[];
@@ -73,7 +88,7 @@ export default function CalculatorTab({ card }: Props) {
     for (const col of columns) {
       const visible = getVisibleCard(col);
       if (visible?.type === 'graph') {
-        addGraphFn(visible.id, cleanExpr);
+        addGraphFn(visible.id, cleanExpr, targetFnType, detection.xExpr, detection.yExpr);
         setActiveCard(visible.id);
         return;
       }
@@ -85,7 +100,7 @@ export default function CalculatorTab({ card }: Props) {
         (c) => c.type === 'graph' && currentCol.cardIds.includes(c.id)
       );
       if (graphInCol) {
-        addGraphFn(graphInCol.id, cleanExpr);
+        addGraphFn(graphInCol.id, cleanExpr, targetFnType, detection.xExpr, detection.yExpr);
         setActiveCard(graphInCol.id);
         return;
       }
@@ -93,7 +108,7 @@ export default function CalculatorTab({ card }: Props) {
 
     const anyGraph = cards.find((c) => c.type === 'graph');
     if (anyGraph) {
-      addGraphFn(anyGraph.id, cleanExpr);
+      addGraphFn(anyGraph.id, cleanExpr, targetFnType, detection.xExpr, detection.yExpr);
       setActiveCard(anyGraph.id);
       return;
     }
@@ -101,7 +116,7 @@ export default function CalculatorTab({ card }: Props) {
     const targetCol = currentCol ?? columns[0];
     if (targetCol) {
       const newId = useCalculator.getState().addCard('graph', targetCol.id);
-      addGraphFn(newId, cleanExpr);
+      addGraphFn(newId, cleanExpr, targetFnType, detection.xExpr, detection.yExpr);
       setActiveCard(newId);
     }
   };
@@ -159,6 +174,35 @@ export default function CalculatorTab({ card }: Props) {
         {bracketHint && (
           <div className="bracket-hint" onClick={handleAutoFix}>
             ⚠️ {bracketHint.hint}
+          </div>
+        )}
+      </div>
+
+      {/* 常用模板面板 */}
+      <div className="template-panel">
+        <button
+          className="template-toggle"
+          onClick={() => setShowTemplates(!showTemplates)}
+        >
+          <span className="template-toggle-icon">{showTemplates ? '▼' : '▶'}</span>
+          常用模板
+        </button>
+        {showTemplates && (
+          <div className="template-grid">
+            {TEMPLATES.map((t) => (
+              <button
+                key={t.expr}
+                className="template-btn"
+                title={t.desc}
+                onClick={() => {
+                  setInput(card.id, t.expr);
+                  setShowTemplates(false);
+                }}
+              >
+                <span className="template-label">{t.label}</span>
+                <span className="template-desc">{t.desc}</span>
+              </button>
+            ))}
           </div>
         )}
       </div>

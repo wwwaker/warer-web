@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { useCalculator, type Card, type GraphFn, COLORS } from '../store/calculatorStore';
+import { useCalculator, type Card, type GraphFn, type GraphMode, COLORS } from '../store/calculatorStore';
 
 type FpInstance = ((opts: Record<string, unknown>) => unknown) & { Chart?: { cache: Record<string, unknown> } };
 
@@ -44,7 +44,7 @@ const GRAPH_FUNCS = new Set([
 ]);
 
 function parseExprForGraph(expr: string): string {
-  let s = expr.replace(/^[yY]\s*=\s*/, '').trim();
+  let s = expr.replace(/^\s*(?:[yY]\s*=\s*|[rR]\s*=\s*)\s*/, '').trim();
   if (!s) return '0';
 
   s = s.replace(/\|([^|]+)\|/g, 'abs($1)');
@@ -111,16 +111,6 @@ function evalExpr(parsedExpr: string, x: number): number | null {
     return typeof result === 'number' && isFinite(result) ? result : null;
   } catch {
     return null;
-  }
-}
-
-function validateExpr(expr: string): boolean {
-  try {
-    const parsed = parseExprForGraph(expr);
-    const result = evalExpr(parsed, 1);
-    return result !== null;
-  } catch {
-    return false;
   }
 }
 
@@ -230,7 +220,10 @@ function FnTag({ fn, cardId }: { fn: GraphFn; cardId: string }) {
           spellCheck={false}
         />
       ) : (
-        <span className="graph-fn-expr" onDoubleClick={startEdit} title="双击编辑" style={{ opacity: fn.hidden ? 0.5 : 1 }}>{fn.expr}</span>
+        <span className="graph-fn-expr" onDoubleClick={startEdit} title="双击编辑" style={{ opacity: fn.hidden ? 0.5 : 1 }}>
+          <span className="graph-fn-type-badge">{fn.fnType === 'polar' ? 'r' : fn.fnType === 'parametric' ? 'P' : fn.fnType === 'implicit' ? 'f' : 'y'}</span>
+          {fn.fnType === 'parametric' ? `x=${fn.xExpr}, y=${fn.yExpr}` : fn.expr}
+        </span>
       )}
       <button className="graph-fn-toggle" onClick={() => toggleGraphFnVisibility(cardId, fn.id)} title={fn.hidden ? '显示' : '隐藏'}>{fn.hidden ? '👁' : '👁‍🗨'}</button>
       <button className="graph-fn-remove" onClick={() => removeGraphFn(cardId, fn.id)}>×</button>
@@ -238,13 +231,57 @@ function FnTag({ fn, cardId }: { fn: GraphFn; cardId: string }) {
   );
 }
 
-const EXAMPLE_EXPRS = ['x^2', 'sin(x)', 'cos(x)', 'log(x)', 'sqrt(x)', 'e^x', '1/x', 'x^3 - 3x'];
+const EXAMPLES: Record<GraphMode, { label: string; x: string; y?: string }[]> = {
+  linear: [
+    { label: 'x^2', x: 'x^2' },
+    { label: 'sin(x)', x: 'sin(x)' },
+    { label: 'cos(x)', x: 'cos(x)' },
+    { label: 'log(x)', x: 'log(x)' },
+    { label: 'sqrt(x)', x: 'sqrt(x)' },
+    { label: 'e^x', x: 'e^x' },
+    { label: '1/x', x: '1/x' },
+  ],
+  polar: [
+    { label: 'sin(2θ)', x: 'sin(2*theta)' },
+    { label: 'cos(3θ)', x: 'cos(3*theta)' },
+    { label: 'θ', x: 'theta' },
+    { label: '心形线', x: '1+cos(theta)' },
+    { label: '三叶草', x: 'sin(3*theta)' },
+    { label: '四叶草', x: 'cos(2*theta)' },
+  ],
+  parametric: [
+    { label: '圆', x: 'cos(t)', y: 'sin(t)' },
+    { label: '椭圆', x: '3*cos(t)', y: '2*sin(t)' },
+    { label: '利萨如', x: 'sin(3*t)', y: 'cos(5*t)' },
+    { label: '心脏线', x: '16*sin(t)^3', y: '13*cos(t)-5*cos(2*t)-2*cos(3*t)-cos(4*t)' },
+    { label: '螺旋', x: 't*cos(t)', y: 't*sin(t)' },
+  ],
+  implicit: [
+    { label: '圆', x: 'x^2 + y^2 - 4' },
+    { label: '椭圆', x: 'x^2/4 + y^2/9 - 1' },
+    { label: '双曲线', x: 'x^2 - y^2 - 1' },
+    { label: '抛物线', x: 'y - x^2' },
+    { label: '蔓叶线', x: 'x^3 + y^3 - 3*x*y' },
+  ],
+};
 
 export default function GraphTab({ card }: Props) {
   const { addGraphFn, clearGraphFns } = useCalculator();
+
+  const MODE_OPTIONS: { key: GraphMode; label: string }[] = [
+    { key: 'linear', label: 'y=f(x)' },
+    { key: 'polar', label: 'r=f(θ)' },
+    { key: 'parametric', label: 'x(t),y(t)' },
+    { key: 'implicit', label: 'f(x,y)=0' },
+  ];
+
+  const [inputMode, setInputMode] = useState<GraphMode>('linear');
+  const [polarGrid, setPolarGrid] = useState(false);
+  const [renderTick, setRenderTick] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const renderRef = useRef<number>(0);
   const [inputExpr, setInputExpr] = useState('');
+  const [paramYExpr, setParamYExpr] = useState('');
   const [renderError, setRenderError] = useState<string | null>(null);
 
   const [axisRange, setAxisRange] = useState<AxisRange>(() => rangeCache.get(card.id) ?? { ...DEFAULT_RANGE });
@@ -299,7 +336,9 @@ export default function GraphTab({ card }: Props) {
       delete fpModuleCache.Chart.cache[plotId];
     }
 
-    const data: { fn: string; color: string; graphType: 'polyline'; closed: boolean; nSamples: number }[] = [];
+    type PlotDatum = Record<string, unknown>;
+
+    const data: PlotDatum[] = [];
     const errors: string[] = [];
 
     const visibleFns = card.graphFunctions.filter((fn) => !fn.hidden);
@@ -313,19 +352,21 @@ export default function GraphTab({ card }: Props) {
     }
 
     for (const fn of visibleFns) {
-      if (!validateExpr(fn.expr)) {
-        errors.push(`${fn.expr}: 无法求值`);
-        continue;
-      }
       try {
-        const parsed = parseExprForGraph(fn.expr);
-        data.push({
-          fn: parsed,
-          color: fn.color,
-          graphType: 'polyline',
-          closed: false,
-          nSamples: 400,
-        });
+        if (fn.fnType === 'linear') {
+          const parsed = parseExprForGraph(fn.expr);
+          data.push({ fn: parsed, color: fn.color, graphType: 'polyline', closed: false, nSamples: 400 });
+        } else if (fn.fnType === 'polar') {
+          const parsed = parseExprForGraph(fn.expr);
+          data.push({ r: parsed, fnType: 'polar', color: fn.color, graphType: 'polyline', closed: false, nSamples: 600, range: [-4 * Math.PI, 4 * Math.PI] });
+        } else if (fn.fnType === 'parametric') {
+          const xParsed = parseExprForGraph(fn.xExpr);
+          const yParsed = parseExprForGraph(fn.yExpr);
+          data.push({ x: xParsed, y: yParsed, fnType: 'parametric', color: fn.color, graphType: 'polyline', closed: false, nSamples: 600, range: [0, 2 * Math.PI] });
+        } else if (fn.fnType === 'implicit') {
+          const parsed = parseExprForGraph(fn.expr);
+          data.push({ fn: parsed, fnType: 'implicit', color: fn.color, graphType: 'interval', nSamples: 400, sampler: 'interval' });
+        }
       } catch (e) {
         errors.push(`${fn.expr}: ${e instanceof Error ? e.message : '解析失败'}`);
       }
@@ -335,7 +376,8 @@ export default function GraphTab({ card }: Props) {
       setRenderError(errors.join('; '));
     }
 
-    if (data.length === 0) return;
+    const hasData = data.length > 0;
+    if (!hasData) return;
 
     const adjustedRange = adjustAspectRatio(currentRange, rect.width, rect.height);
 
@@ -379,7 +421,10 @@ export default function GraphTab({ card }: Props) {
       setRenderError(e instanceof Error ? e.message : String(e));
       containerRef.current.innerHTML = '';
     }
-  }, [card.graphFunctions, card.id, readCurrentRange]);
+
+    // Trigger polar grid refresh (happens after state update)
+    setRenderTick(t => t + 1);
+  }, [card.graphFunctions, card.id, readCurrentRange, setRenderTick]);
 
   useEffect(() => {
     cancelAnimationFrame(renderRef.current);
@@ -433,8 +478,15 @@ export default function GraphTab({ card }: Props) {
 
   const handleAdd = () => {
     if (!inputExpr.trim()) return;
-    addGraphFn(card.id, inputExpr);
-    setInputExpr('');
+    if (inputMode === 'parametric') {
+      if (!paramYExpr.trim()) return;
+      addGraphFn(card.id, inputExpr, 'parametric', inputExpr, paramYExpr);
+      setInputExpr('');
+      setParamYExpr('');
+    } else {
+      addGraphFn(card.id, inputExpr, inputMode);
+      setInputExpr('');
+    }
   };
 
   const handleClear = () => {
@@ -602,22 +654,163 @@ export default function GraphTab({ card }: Props) {
     };
   }, [readCurrentRange, card.id, traceMode]);
 
+  // Polar grid SVG overlay — reads current scales from fpInstanceRef
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !polarGrid) return;
+
+    // Read current domain from function-plot instance (tracks zoom/pan)
+    let xMin = -10, xMax = 10, yMin = -10, yMax = 10;
+    const inst = fpInstanceRef.current;
+    if (inst) {
+      const xs = (inst as any).xScale;
+      const ys = (inst as any).yScale;
+      if (xs?.domain) {
+        const d = xs.domain();
+        if (d && d.length === 2) { xMin = d[0]; xMax = d[1]; }
+      }
+      if (ys?.domain) {
+        const d = ys.domain();
+        if (d && d.length === 2) { yMin = d[0]; yMax = d[1]; }
+      }
+    }
+
+    let overlay = el.querySelector('.polar-grid-overlay') as SVGSVGElement | null;
+    if (!overlay) {
+      overlay = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      overlay.classList.add('polar-grid-overlay');
+      overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible';
+      el.appendChild(overlay);
+    }
+
+    const rect = el.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+
+    const originX = ((0 - xMin) / (xMax - xMin)) * w;
+    const originY = ((yMax - 0) / (yMax - yMin)) * h;
+
+    const ppuX = w / (xMax - xMin);
+    const ppuY = h / (yMax - yMin);
+    const ppu = Math.min(ppuX, ppuY);
+
+    const maxDataRadius = Math.min(
+      Math.abs(xMin), Math.abs(xMax),
+      Math.abs(yMin), Math.abs(yMax)
+    );
+    if (maxDataRadius < 0.1 || !isFinite(maxDataRadius)) {
+      overlay.innerHTML = '';
+      return;
+    }
+
+    overlay.innerHTML = '';
+
+    const rawStep = maxDataRadius / 5;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    let niceStep = magnitude;
+    if (rawStep / magnitude >= 5) niceStep = magnitude * 5;
+    else if (rawStep / magnitude >= 2) niceStep = magnitude * 2;
+    const numCircles = Math.floor(maxDataRadius / niceStep);
+    if (numCircles < 1) return;
+
+    for (let i = 1; i <= numCircles; i++) {
+      const dataR = niceStep * i;
+      const pixelR = dataR * ppu;
+      if (pixelR < 2) continue;
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', String(originX));
+      circle.setAttribute('cy', String(originY));
+      circle.setAttribute('r', String(pixelR));
+      circle.setAttribute('fill', 'none');
+      circle.setAttribute('stroke', 'rgba(107,112,148,0.15)');
+      circle.setAttribute('stroke-width', '1');
+      overlay.appendChild(circle);
+    }
+
+    const corners = [
+      [0 - originX, 0 - originY],
+      [w - originX, 0 - originY],
+      [0 - originX, h - originY],
+      [w - originX, h - originY],
+    ];
+    const maxPxDist = Math.sqrt(Math.max(...corners.map(([dx, dy]) => dx * dx + dy * dy)));
+
+    const numLines = 12;
+    for (let i = 0; i < numLines; i++) {
+      const angle = (Math.PI * 2 * i) / numLines;
+      const dx = maxPxDist * Math.cos(angle);
+      const dy = maxPxDist * Math.sin(angle);
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', String(originX));
+      line.setAttribute('y1', String(originY));
+      line.setAttribute('x2', String(originX + dx));
+      line.setAttribute('y2', String(originY + dy));
+      line.setAttribute('stroke', 'rgba(107,112,148,0.15)');
+      line.setAttribute('stroke-width', '1');
+      overlay.appendChild(line);
+    }
+
+    return () => {
+      if (overlay && overlay.parentNode) overlay.remove();
+    };
+  }, [polarGrid, card.id, renderTick]);
+
   return (
     <div className="graph-tab">
       <div className="graph-toolbar">
-        <input
-          type="text"
-          value={inputExpr}
-          onChange={(e) => setInputExpr(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
-          placeholder="输入函数，如 x^2, sin(x), ln(x)..."
-          className="graph-input"
-          spellCheck={false}
-        />
+        <div className="graph-mode-selector">
+          {MODE_OPTIONS.map((opt) => (
+            <button
+              key={opt.key}
+              className={`graph-mode-btn${inputMode === opt.key ? ' active' : ''}`}
+              onClick={() => setInputMode(opt.key)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {inputMode === 'parametric' ? (
+          <div className="graph-param-inputs">
+            <span className="graph-param-label">x(t)=</span>
+            <input
+              type="text"
+              value={inputExpr}
+              onChange={(e) => setInputExpr(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
+              placeholder="16*sin(t)^3"
+              className="graph-input"
+              spellCheck={false}
+            />
+            <span className="graph-param-label">y(t)=</span>
+            <input
+              type="text"
+              value={paramYExpr}
+              onChange={(e) => setParamYExpr(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
+              placeholder="13*cos(t)-5*cos(2*t)-..."
+              className="graph-input"
+              spellCheck={false}
+            />
+          </div>
+        ) : (
+          <input
+            type="text"
+            value={inputExpr}
+            onChange={(e) => setInputExpr(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
+            placeholder={inputMode === 'polar' ? '输入 r = f(θ)，如 sin(2*theta)' : inputMode === 'implicit' ? '输入 f(x, y) = 0，如 x^2 + y^2 - 4' : '输入函数，如 x^2, sin(x)...'}
+            className="graph-input"
+            spellCheck={false}
+          />
+        )}
         <button className="graph-add-btn" onClick={handleAdd}>添加</button>
         {card.graphFunctions.length > 0 && (
           <>
-            <button className={`graph-tool-btn${traceMode ? ' active' : ''}`} onClick={() => { setTraceMode(!traceMode); setTraceInfo(null); }} title="追踪模式">⊕</button>
+            {card.graphFunctions.some(f => !f.hidden && f.fnType === 'linear') && (
+              <button className={`graph-tool-btn${traceMode ? ' active' : ''}`} onClick={() => { setTraceMode(!traceMode); setTraceInfo(null); }} title="追踪模式">⊕</button>
+            )}
+            <button className={`graph-tool-btn${polarGrid ? ' active' : ''}`} onClick={() => setPolarGrid(!polarGrid)} title="极坐标网格">{polarGrid ? '◉' : '○'}</button>
             <button className="graph-tool-btn" onClick={handleZoomIn} title="放大">＋</button>
             <button className="graph-tool-btn" onClick={handleZoomOut} title="缩小">－</button>
             <button className="graph-tool-btn" onClick={handleResetView} title="重置视图">⟲</button>
@@ -664,15 +857,21 @@ export default function GraphTab({ card }: Props) {
         {card.graphFunctions.length === 0 ? (
           <div key="empty" className="graph-empty">
             <div className="graph-empty-icon">📈</div>
-            <div className="graph-empty-text">在上方输入函数表达式添加图像</div>
+            <div className="graph-empty-text">在上方输入表达式添加图像</div>
             <div className="graph-examples">
-              {EXAMPLE_EXPRS.map((ex) => (
+              {EXAMPLES[inputMode].map((ex) => (
                 <button
-                  key={ex}
+                  key={ex.label}
                   className="graph-example-btn"
-                  onClick={() => addGraphFn(card.id, ex)}
+                  onClick={() => {
+                    if (inputMode === 'parametric' && ex.y) {
+                      addGraphFn(card.id, ex.x, 'parametric', ex.x, ex.y);
+                    } else {
+                      addGraphFn(card.id, ex.x, inputMode);
+                    }
+                  }}
                 >
-                  {ex}
+                  {ex.label}
                 </button>
               ))}
             </div>

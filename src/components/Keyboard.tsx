@@ -43,10 +43,10 @@ const KEYS: { label: string; value: string; span?: number; cls?: string }[][] = 
   [
     { label: 'diff', value: 'diff(', cls: 'cloud' },
     { label: 'int', value: 'integrate(', cls: 'cloud' },
+    { label: 'θ', value: 'theta', cls: 'cloud' },
     { label: 'x', value: 'x', cls: 'cloud' },
     { label: 'y', value: 'y', cls: 'cloud' },
-    { label: ',', value: ', ' },
-    { label: 'simp', value: 'simplify(', cls: 'cloud' },
+    { label: 't', value: 't', cls: 'cloud' },
   ],
 ];
 

@@ -7,7 +7,7 @@ import Keyboard from './components/Keyboard';
 import './App.css';
 
 function CardTab({ card, columnId, isActive }: { card: Card; columnId: string; isActive: boolean }) {
-  const { renameCard, removeCard, setActiveCard, setDragState, moveCard } = useCalculator();
+  const { renameCard, removeCard, setActiveCard, setDragState } = useCalculator();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -191,14 +191,14 @@ function ColumnView({ column }: { column: Column }) {
 }
 
 function App() {
-  const { columns, isFullscreen, addColumn } = useCalculator();
+  const { columns, addColumn } = useCalculator();
 
   return (
     <div className="app">
       <header className="app-header">
         <div className="app-header-left">
           <h1>warer</h1>
-          <span className="header-badge">v0.1.0</span>
+          <span className="header-badge">v0.2.0</span>
         </div>
         <div className="header-actions">
           {columns.length < 3 && (
