@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.2.1]
+
+### Fixes
+
+- **cloudEngine**: 添加 HTTP 状态码检查，防止非 2xx 响应导致解析崩溃
+- **graph**: 移除重复 `useEffect`，修复函数列表变化时渲染两次的问题
+- **history**: 移除 `HistoryTab` 组件中未使用的 `tab` prop
+- **store**: 移除未在接口中声明且未使用的 `getColumnActiveCard` 方法
+- **store**: 修复 `setActiveCard` 在 `id` 为 `null` 时的类型错误
+- **store**: 修复 `removeCard` 和 `moveCard` 未正确更新每栏独立 `activeCardId` 的问题
+- **store**: 修复 `loadHistoryItem` 未正确将历史记录加载到当前栏的问题
+
+### Refactor
+
+- **index.css**: 移除与 `App.css` 完全重复的样式定义
+- **all**: 清理所有前端源文件中的不必要中文注释
+- **graph**: 替换 `as any` 类型断言为更安全的 `Record<string, unknown>` 断言
+- **localEngine**: 为空 `catch` 块添加注释，满足 lint 规则
+- **keyboard**: 调整 `0` 和 `=` 按键布局，新增 `,` 键
+
 ## [v0.2.0]
 
 ### Features
@@ -21,8 +41,6 @@ All notable changes to this project will be documented in this file.
 
 - **graph**: 修复隐式方程使用错误 `graphType`（`polyline`→`interval`）导致绘制失败
 - **graph**: 修复极坐标 `r=` 前缀未剥离导致的解析错误
-- **graph**: 极坐标默认范围从 `[-π, π]` 扩至 `[-4π, 4π]` 使螺旋线可见
-- **graph**: 切换绘图模式不再清空已添加函数
 - **backend**: 增加 30s 计算超时防止卡死
 - **backend**: 嵌套命令（如 `diff(solve(...))`）返回清晰错误信息
 
