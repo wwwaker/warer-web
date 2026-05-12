@@ -53,5 +53,14 @@ export async function computeCloud(expression: string, signal?: AbortSignal): Pr
     signal,
   });
 
+  if (!res.ok) {
+    return {
+      status_code: res.status,
+      execution_time: '0ms',
+      result: null,
+      error: { type: 'NetworkError', message: `HTTP ${res.status}`, position: null },
+    };
+  }
+
   return res.json();
 }

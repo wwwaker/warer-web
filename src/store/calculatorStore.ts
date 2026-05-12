@@ -29,6 +29,7 @@ export interface Column {
   id: string;
   cardIds: string[];
   flex: number;
+  activeCardId: string | null;
 }
 
 export const COLORS = ['#5b5ef0', '#0ea5a0', '#e5484d', '#f5a623', '#30a46c', '#e84393', '#8b5cf6', '#f472b6'];
@@ -100,7 +101,7 @@ interface CalculatorState {
   addGraphFn: (cardId: string, expr: string, fnType?: GraphMode, xExpr?: string, yExpr?: string) => void;
   removeGraphFn: (cardId: string, fnId: string) => void;
   clearGraphFns: (cardId: string) => void;
-  updateGraphFn: (cardId: string, fnId: string, updates: Partial<Pick<GraphFn, 'expr' | 'color' | 'hidden'>>) => void;
+  updateGraphFn: (cardId: string, fnId: string, updates: Partial<Pick<GraphFn, 'expr' | 'xExpr' | 'yExpr' | 'color' | 'hidden'>>) => void;
   toggleGraphFnVisibility: (cardId: string, fnId: string) => void;
   toggleFullscreen: () => void;
   clearHistory: () => void;
@@ -124,8 +125,8 @@ const abortControllers = new Map<string, AbortController>();
 export const useCalculator = create<CalculatorState>((set, get) => ({
   cards: [calc1, graph1],
   columns: [
-    { id: col1Id, cardIds: [calc1.id], flex: 1 },
-    { id: col2Id, cardIds: [graph1.id], flex: 1 },
+    { id: col1Id, cardIds: [calc1.id], flex: 1, activeCardId: calc1.id },
+    { id: col2Id, cardIds: [graph1.id], flex: 1, activeCardId: graph1.id },
   ],
   activeCardId: calc1.id,
   history: [],
@@ -152,14 +153,14 @@ export const useCalculator = create<CalculatorState>((set, get) => ({
     set((s) => ({
       cards: [...s.cards, card],
       columns: s.columns.map((c) =>
-        c.id === targetCol.id ? { ...c, cardIds: [...c.cardIds, card.id] } : c
+        c.id === targetCol.id ? { ...c, cardIds: [...c.cardIds, card.id], activeCardId: card.id } : c
       ),
     }));
     return card.id;
   },
 
   removeCard: (id) => {
-    const { cards, columns, activeCardId } = get();
+    const { cards, columns } = get();
     const card = cards.find((c) => c.id === id);
     if (!card) return;
 
@@ -167,18 +168,20 @@ export const useCalculator = create<CalculatorState>((set, get) => ({
     if (col && col.cardIds.length <= 1) return;
 
     const next = cards.filter((c) => c.id !== id);
-    let newActive = activeCardId;
-    if (activeCardId === id) {
-      newActive = next.length > 0 ? next[0].id : null;
-    }
-
+    
     set({
       cards: next,
-      activeCardId: newActive,
-      columns: columns.map((c) => ({
-        ...c,
-        cardIds: c.cardIds.filter((cid) => cid !== id),
-      })),
+      columns: columns.map((c) => {
+        if (!c.cardIds.includes(id)) return c;
+        
+        const newCardIds = c.cardIds.filter((cid) => cid !== id);
+        let newActiveId = c.activeCardId;
+        if (c.activeCardId === id) {
+          newActiveId = newCardIds.length > 0 ? newCardIds[0] : null;
+        }
+        
+        return { ...c, cardIds: newCardIds, activeCardId: newActiveId };
+      }),
     });
   },
 
@@ -187,7 +190,14 @@ export const useCalculator = create<CalculatorState>((set, get) => ({
       cards: s.cards.map((c) => (c.id === id ? { ...c, title } : c)),
     })),
 
-  setActiveCard: (id) => set({ activeCardId: id }),
+  setActiveCard: (id) => {
+    set((s) => ({
+      activeCardId: id,
+      columns: s.columns.map((c) =>
+        id && c.cardIds.includes(id) ? { ...c, activeCardId: id } : c
+      ),
+    }));
+  },
 
   moveCard: (cardId, fromColumnId, toColumnId, toIndex) => {
     set((s) => ({
@@ -198,12 +208,16 @@ export const useCalculator = create<CalculatorState>((set, get) => ({
           return { ...c, cardIds: ids };
         }
         if (c.id === fromColumnId) {
-          return { ...c, cardIds: c.cardIds.filter((id) => id !== cardId) };
+          const newCardIds = c.cardIds.filter((id) => id !== cardId);
+          const newActiveId = c.activeCardId === cardId 
+            ? (newCardIds.length > 0 ? newCardIds[0] : null)
+            : c.activeCardId;
+          return { ...c, cardIds: newCardIds, activeCardId: newActiveId };
         }
         if (c.id === toColumnId) {
           const ids = [...c.cardIds];
           ids.splice(toIndex, 0, cardId);
-          return { ...c, cardIds: ids };
+          return { ...c, cardIds: ids, activeCardId: cardId };
         }
         return c;
       }),
@@ -217,7 +231,7 @@ export const useCalculator = create<CalculatorState>((set, get) => ({
     const newColId = `col_${Date.now().toString(36)}`;
     set((s) => ({
       cards: [...s.cards, newCard],
-      columns: [...s.columns, { id: newColId, cardIds: [newCard.id], flex: 1 }],
+      columns: [...s.columns, { id: newColId, cardIds: [newCard.id], flex: 1, activeCardId: newCard.id }],
     }));
   },
 
@@ -328,7 +342,6 @@ export const useCalculator = create<CalculatorState>((set, get) => ({
     const card = get().cards.find((c) => c.id === id);
     if (!card || !card.input.trim()) return;
 
-    // 取消之前的请求
     const prev = abortControllers.get(id);
     if (prev) prev.abort();
 
@@ -341,7 +354,6 @@ export const useCalculator = create<CalculatorState>((set, get) => ({
     const controller = new AbortController();
     abortControllers.set(id, controller);
 
-    // 简单的防抖延迟，避免频繁输入时不断触发计算
     await new Promise<void>((resolve) => {
       setTimeout(resolve, 300);
     });
@@ -417,21 +429,27 @@ export const useCalculator = create<CalculatorState>((set, get) => ({
   clearHistory: () => set({ history: [] }),
 
   loadHistoryItem: (input) => {
-    const { cards, activeCardId } = get();
+    const { cards, activeCardId, columns } = get();
+
+    const currentCol = columns.find((c) => c.cardIds.includes(activeCardId || ''));
     const active = cards.find((c) => c.id === activeCardId);
-    if (active && active.type === 'calculator') {
+    
+    if (active && active.type === 'calculator' && currentCol) {
       set((s) => ({
         cards: s.cards.map((c) =>
           c.id === activeCardId ? { ...c, input, output: null } : c
         ),
       }));
     } else {
-      const id = get().addCard('calculator');
-      set((s) => ({
-        cards: s.cards.map((c) =>
-          c.id === id ? { ...c, input } : c
-        ),
-      }));
+      const targetColId = currentCol?.id || columns[0]?.id;
+      if (targetColId) {
+        const id = get().addCard('calculator', targetColId);
+        set((s) => ({
+          cards: s.cards.map((c) =>
+            c.id === id ? { ...c, input } : c
+          ),
+        }));
+      }
     }
   },
 

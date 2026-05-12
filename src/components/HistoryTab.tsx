@@ -1,12 +1,8 @@
 import { useState, useMemo } from 'react';
-import { useCalculator, type Card } from '../store/calculatorStore';
+import { useCalculator } from '../store/calculatorStore';
 import KatexRenderer from './KatexRenderer';
 
-interface Props {
-  tab: Card;
-}
-
-export default function HistoryTab({ tab: _tab }: Props) {
+export default function HistoryTab() {
   const { history, clearHistory, loadHistoryItem } = useCalculator();
   const [searchTerm, setSearchTerm] = useState('');
 

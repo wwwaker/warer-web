@@ -32,6 +32,11 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+input, textarea {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   background: var(--bg);
@@ -190,6 +195,7 @@ body {
   border-radius: var(--radius-sm); padding: 9px 12px; font-size: 16px;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   color: var(--text); outline: none; transition: all var(--transition);
+  user-select: text; -webkit-user-select: text;
 }
 .display-input input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); background: var(--surface); }
 .display-input input::placeholder { color: var(--text-dim); font-family: system-ui; font-size: 13px; }

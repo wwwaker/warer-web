@@ -77,48 +77,47 @@ export default function CalculatorTab({ card }: Props) {
     const cleanExpr = preprocessExprForPlot(detection.expr);
     if (!cleanExpr) return;
 
-    const { cards, columns, activeCardId, setActiveCard } = useCalculator.getState();
+    const state = useCalculator.getState();
+    const { cards, columns, setActiveCard } = state;
     const targetFnType = detection.type;
 
-    const getVisibleCard = (col: { cardIds: string[] }) => {
-      const colCards = col.cardIds.map(id => cards.find(c => c.id === id)).filter(Boolean) as Card[];
-      return colCards.find(c => c.id === activeCardId) ?? colCards[0];
-    };
-
-    for (const col of columns) {
-      const visible = getVisibleCard(col);
-      if (visible?.type === 'graph') {
-        addGraphFn(visible.id, cleanExpr, targetFnType, detection.xExpr, detection.yExpr);
-        setActiveCard(visible.id);
-        return;
-      }
-    }
-
     const currentCol = columns.find((col) => col.cardIds.includes(card.id));
-    if (currentCol) {
-      const graphInCol = cards.find(
-        (c) => c.type === 'graph' && currentCol.cardIds.includes(c.id)
-      );
-      if (graphInCol) {
-        addGraphFn(graphInCol.id, cleanExpr, targetFnType, detection.xExpr, detection.yExpr);
-        setActiveCard(graphInCol.id);
+    if (!currentCol) return;
+
+    const otherCols = columns.filter((col) => col.id !== currentCol.id);
+
+    for (const col of otherCols) {
+      const activeCardInCol = cards.find((c) => c.id === col.activeCardId);
+      if (activeCardInCol && activeCardInCol.type === 'graph') {
+        addGraphFn(activeCardInCol.id, cleanExpr, targetFnType, detection.xExpr, detection.yExpr);
+        setActiveCard(activeCardInCol.id);
         return;
       }
     }
 
-    const anyGraph = cards.find((c) => c.type === 'graph');
-    if (anyGraph) {
-      addGraphFn(anyGraph.id, cleanExpr, targetFnType, detection.xExpr, detection.yExpr);
-      setActiveCard(anyGraph.id);
+    for (const col of otherCols) {
+      const graphCardInCol = cards.find(
+        (c) => c.type === 'graph' && col.cardIds.includes(c.id)
+      );
+      if (graphCardInCol) {
+        addGraphFn(graphCardInCol.id, cleanExpr, targetFnType, detection.xExpr, detection.yExpr);
+        setActiveCard(graphCardInCol.id);
+        return;
+      }
+    }
+
+    const graphInCurrentCol = cards.find(
+      (c) => c.type === 'graph' && currentCol.cardIds.includes(c.id)
+    );
+    if (graphInCurrentCol) {
+      addGraphFn(graphInCurrentCol.id, cleanExpr, targetFnType, detection.xExpr, detection.yExpr);
+      setActiveCard(graphInCurrentCol.id);
       return;
     }
 
-    const targetCol = currentCol ?? columns[0];
-    if (targetCol) {
-      const newId = useCalculator.getState().addCard('graph', targetCol.id);
-      addGraphFn(newId, cleanExpr, targetFnType, detection.xExpr, detection.yExpr);
-      setActiveCard(newId);
-    }
+    const newId = useCalculator.getState().addCard('graph', currentCol.id);
+    addGraphFn(newId, cleanExpr, targetFnType, detection.xExpr, detection.yExpr);
+    setActiveCard(newId);
   };
 
   const errorPosition = card.output?.error && card.output.errorPosition != null ? card.output.errorPosition : null;
@@ -178,7 +177,6 @@ export default function CalculatorTab({ card }: Props) {
         )}
       </div>
 
-      {/* 常用模板面板 */}
       <div className="template-panel">
         <button
           className="template-toggle"

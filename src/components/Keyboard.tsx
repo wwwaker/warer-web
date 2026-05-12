@@ -35,10 +35,11 @@ const KEYS: { label: string; value: string; span?: number; cls?: string }[][] = 
     { label: 'e', value: 'e' },
   ],
   [
-    { label: '0', value: '0', span: 2 },
+    { label: '0', value: '0' },
     { label: '.', value: '.' },
+    { label: ',', value: ',' },
     { label: '+', value: '+' },
-    { label: '=', value: 'COMPUTE', cls: 'accent' },
+    { label: '=', value: 'COMPUTE', cls: 'accent', span: 2 },
   ],
   [
     { label: 'diff', value: 'diff(', cls: 'cloud' },

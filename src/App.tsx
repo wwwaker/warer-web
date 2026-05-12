@@ -92,7 +92,7 @@ function CardContent({ card }: { card: Card }) {
     );
   }
   if (card.type === 'graph') return <GraphTab key={card.id} card={card} />;
-  if (card.type === 'history') return <HistoryTab tab={card} />;
+  if (card.type === 'history') return <HistoryTab />;
   return null;
 }
 
@@ -149,10 +149,11 @@ function ColumnDivider({ leftIdx }: { leftIdx: number }) {
 }
 
 function ColumnView({ column }: { column: Column }) {
-  const { cards, activeCardId, addCard, removeColumn } = useCalculator();
+  const { cards, addCard, removeColumn } = useCalculator();
   const columns = useCalculator((state) => state.columns);
   const colCards = column.cardIds.map((id) => cards.find((c) => c.id === id)).filter(Boolean) as Card[];
-  const activeCard = colCards.find((c) => c.id === activeCardId) ?? colCards[0];
+  
+  const activeCard = colCards.find((c) => c.id === column.activeCardId) ?? (colCards.length > 0 ? colCards[0] : null);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -172,7 +173,7 @@ function ColumnView({ column }: { column: Column }) {
     <div className="column" onDragOver={handleDragOver} onDrop={handleDrop}>
       <div className="column-tabs">
         {colCards.map((card) => (
-          <CardTab key={card.id} card={card} columnId={column.id} isActive={card.id === (activeCard?.id)} />
+          <CardTab key={card.id} card={card} columnId={column.id} isActive={card.id === column.activeCardId} />
         ))}
         <div className="column-tab-actions">
           <button className="tab-action-btn" onClick={() => addCard('calculator', column.id)} title="添加计算器">+🔢</button>

@@ -101,17 +101,15 @@ function parseExprForGraph(expr: string): string {
     }
   }
 
-  return result.join('');
-}
+  const parsed = result.join('');
 
-function evalExpr(parsedExpr: string, x: number): number | null {
-  try {
-    const fn = new Function('x', ...Object.keys(Math), `with(Math){return(${parsedExpr})}`);
-    const result = fn(x);
-    return typeof result === 'number' && isFinite(result) ? result : null;
-  } catch {
-    return null;
+  const openCount = (parsed.match(/\(/g) || []).length;
+  const closeCount = (parsed.match(/\)/g) || []).length;
+  if (openCount !== closeCount) {
+    throw new Error('括号不匹配');
   }
+  
+  return parsed;
 }
 
 interface AxisRange {
@@ -135,18 +133,13 @@ function lerpRange(from: AxisRange, to: AxisRange, t: number): AxisRange {
 }
 
 function adjustAspectRatio(range: AxisRange, width: number, height: number): AxisRange {
-  // 保持 X/Y 轴的单位长度在视觉上相等（即 y=x 的斜率为 45°）
   const xRange = range.xMax - range.xMin;
   const yRange = range.yMax - range.yMin;
-  
-  // 计算当前容器的宽高比
+
   const containerRatio = width / height;
-  // 计算数据范围的宽高比
   const dataRatio = xRange / yRange;
-  
-  // 如果数据范围的比例与容器比例不匹配，需要扩展其中一个轴
+
   if (dataRatio > containerRatio) {
-    // X 轴相对更长，需要扩展 Y 轴范围
     const newYRange = xRange / containerRatio;
     const yCenter = (range.yMin + range.yMax) / 2;
     return {
@@ -155,7 +148,6 @@ function adjustAspectRatio(range: AxisRange, width: number, height: number): Axi
       yMax: yCenter + newYRange / 2
     };
   } else {
-    // Y 轴相对更长，需要扩展 X 轴范围
     const newXRange = yRange * containerRatio;
     const xCenter = (range.xMin + range.xMax) / 2;
     return {
@@ -170,6 +162,16 @@ interface Props {
   card: Card;
 }
 
+function findTopLevelComma(s: string): number {
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '(') depth++;
+    else if (s[i] === ')') depth--;
+    else if (s[i] === ',' && depth === 0) return i;
+  }
+  return -1;
+}
+
 function FnTag({ fn, cardId }: { fn: GraphFn; cardId: string }) {
   const { removeGraphFn, updateGraphFn, toggleGraphFnVisibility } = useCalculator();
   const [editing, setEditing] = useState(false);
@@ -177,14 +179,42 @@ function FnTag({ fn, cardId }: { fn: GraphFn; cardId: string }) {
   const [showColors, setShowColors] = useState(false);
 
   const startEdit = () => {
-    setEditExpr(fn.expr);
+    if (fn.fnType === 'parametric') {
+      // Show the edit input as t(xExpr, yExpr) so both fields can be edited together
+      setEditExpr(`t(${fn.xExpr}, ${fn.yExpr})`);
+    } else {
+      setEditExpr(fn.expr);
+    }
     setEditing(true);
   };
 
   const finishEdit = () => {
-    const trimmed = editExpr.trim().replace(/^y\s*=\s*/i, '');
-    if (trimmed && trimmed !== fn.expr) {
-      updateGraphFn(cardId, fn.id, { expr: trimmed });
+    const trimmed = editExpr.trim();
+    if (!trimmed) { setEditing(false); return; }
+
+    if (fn.fnType === 'parametric') {
+      const lower = trimmed.toLowerCase();
+      if (lower.startsWith('t(') && trimmed.endsWith(')')) {
+        const inner = trimmed.slice(2, -1).trim();
+        const commaIdx = findTopLevelComma(inner);
+        if (commaIdx !== -1) {
+          const newX = inner.slice(0, commaIdx).trim();
+          const newY = inner.slice(commaIdx + 1).trim();
+          if (newX && newY && (newX !== fn.xExpr || newY !== fn.yExpr)) {
+            updateGraphFn(cardId, fn.id, { expr: trimmed, xExpr: newX, yExpr: newY });
+          }
+          setEditing(false);
+          return;
+        }
+      }
+      // If parsing fails, don't update — user can re-enter
+      setEditing(false);
+      return;
+    }
+
+    const cleaned = trimmed.replace(/^y\s*=\s*/i, '');
+    if (cleaned && cleaned !== fn.expr) {
+      updateGraphFn(cardId, fn.id, { expr: cleaned });
     }
     setEditing(false);
   };
@@ -276,8 +306,6 @@ export default function GraphTab({ card }: Props) {
   ];
 
   const [inputMode, setInputMode] = useState<GraphMode>('linear');
-  const [polarGrid, setPolarGrid] = useState(false);
-  const [renderTick, setRenderTick] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const renderRef = useRef<number>(0);
   const [inputExpr, setInputExpr] = useState('');
@@ -293,7 +321,6 @@ export default function GraphTab({ card }: Props) {
 
   const [mouseCoord, setMouseCoord] = useState<{ x: number; y: number } | null>(null);
   const [traceInfo, setTraceInfo] = useState<{ x: number; y: number; color: string; expr: string } | null>(null);
-  const [traceMode, setTraceMode] = useState(false);
 
   const graphContainerRef = useRef<HTMLDivElement>(null);
   const [isGraphFullscreen, setIsGraphFullscreen] = useState(false);
@@ -324,10 +351,8 @@ export default function GraphTab({ card }: Props) {
     const rect = containerRef.current.getBoundingClientRect();
     if (rect.width < 10 || rect.height < 10) return;
 
-    // 优先使用 rangeRef 中保存的状态，而不是从旧实例读取
     const currentRange = rangeRef.current;
 
-    // 始终清空容器并重新渲染，确保状态一致
     containerRef.current.innerHTML = '';
     setRenderError(null);
 
@@ -340,35 +365,45 @@ export default function GraphTab({ card }: Props) {
 
     const data: PlotDatum[] = [];
     const errors: string[] = [];
+    const fnLookup: { expr: string; color: string }[] = [];
 
     const visibleFns = card.graphFunctions.filter((fn) => !fn.hidden);
     if (card.graphFunctions.length === 0) {
-      // 没有函数时已经清空了容器，直接返回
       return;
     }
     if (visibleFns.length === 0) {
-      // 即使没有可见函数，也渲染坐标轴
       data.push({ fn: '0', color: '#ccc', graphType: 'polyline', closed: false, nSamples: 2 });
     }
 
     for (const fn of visibleFns) {
       try {
+        let datum: PlotDatum | null = null;
+        
         if (fn.fnType === 'linear') {
           const parsed = parseExprForGraph(fn.expr);
-          data.push({ fn: parsed, color: fn.color, graphType: 'polyline', closed: false, nSamples: 400 });
+          datum = { fn: parsed, color: fn.color, graphType: 'polyline', closed: false, nSamples: 400, title: fn.expr };
+          fnLookup.push({ expr: fn.expr, color: fn.color });
         } else if (fn.fnType === 'polar') {
           const parsed = parseExprForGraph(fn.expr);
-          data.push({ r: parsed, fnType: 'polar', color: fn.color, graphType: 'polyline', closed: false, nSamples: 600, range: [-4 * Math.PI, 4 * Math.PI] });
+          datum = { r: parsed, fnType: 'polar', color: fn.color, graphType: 'polyline', closed: false, nSamples: 600, range: [0, 4 * Math.PI], title: 'r=' + fn.expr };
+          fnLookup.push({ expr: 'r=' + fn.expr, color: fn.color });
         } else if (fn.fnType === 'parametric') {
           const xParsed = parseExprForGraph(fn.xExpr);
           const yParsed = parseExprForGraph(fn.yExpr);
-          data.push({ x: xParsed, y: yParsed, fnType: 'parametric', color: fn.color, graphType: 'polyline', closed: false, nSamples: 600, range: [0, 2 * Math.PI] });
+          datum = { x: xParsed, y: yParsed, fnType: 'parametric', color: fn.color, graphType: 'polyline', closed: false, nSamples: 600, range: [0, 2 * Math.PI], title: 'x=' + fn.xExpr + ', y=' + fn.yExpr };
+          fnLookup.push({ expr: 'x=' + fn.xExpr + ', y=' + fn.yExpr, color: fn.color });
         } else if (fn.fnType === 'implicit') {
           const parsed = parseExprForGraph(fn.expr);
-          data.push({ fn: parsed, fnType: 'implicit', color: fn.color, graphType: 'interval', nSamples: 400, sampler: 'interval' });
+          datum = { fn: parsed, fnType: 'implicit', color: fn.color, graphType: 'interval', nSamples: 400, sampler: 'interval', title: fn.expr };
+          fnLookup.push({ expr: fn.expr, color: fn.color });
+        }
+        
+        if (datum) {
+          data.push(datum);
         }
       } catch (e) {
         errors.push(`${fn.expr}: ${e instanceof Error ? e.message : '解析失败'}`);
+        console.warn(`函数解析失败: ${fn.expr}`, e);
       }
     }
 
@@ -377,11 +412,33 @@ export default function GraphTab({ card }: Props) {
     }
 
     const hasData = data.length > 0;
-    if (!hasData) return;
+    if (!hasData) {
+      data.push({ fn: '0', color: '#ccc', graphType: 'polyline', closed: false, nSamples: 2 });
+    }
 
     const adjustedRange = adjustAspectRatio(currentRange, rect.width, rect.height);
 
     try {
+      const prev = fpInstanceRef.current as Record<string, unknown> | null;
+      if (prev && typeof (prev as Record<string, unknown>).removeAllListeners === 'function') {
+        ((prev as Record<string, unknown>).removeAllListeners as () => void)();
+      }
+
+      const validData = data.filter((d) => {
+        if (d.fnType === 'parametric') {
+          return d.x != null && d.y != null;
+        }
+        if (d.fnType === 'polar') {
+          return d.r != null;
+        }
+        if (d.fnType === 'implicit') {
+          return d.fn != null;
+        }
+        return d.fn != null;
+      });
+
+      const finalData = validData.length > 0 ? validData : [{ fn: '0', color: '#ccc', graphType: 'polyline', closed: false, nSamples: 2 }];
+
       const instance = fpModuleCache({
         target: containerRef.current,
         id: plotId,
@@ -390,12 +447,29 @@ export default function GraphTab({ card }: Props) {
         xAxis: { domain: [adjustedRange.xMin, adjustedRange.xMax], label: 'x' },
         yAxis: { domain: [adjustedRange.yMin, adjustedRange.yMax], label: 'y' },
         grid: true,
-        data,
+        data: finalData,
         zoom: true,
         disableZoom: false,
         tip: { xLine: false, yLine: false },
       }) as Record<string, unknown> | undefined;
       fpInstanceRef.current = instance ?? null;
+
+      if (instance && typeof (instance as Record<string, unknown>).on === 'function') {
+        const chart = instance as Record<string, unknown>;
+        const chartOn = chart.on as (event: string, handler: (...args: never[]) => void) => void;
+        chartOn('before:mousemove', (coord: { x: number; y: number }) => {
+          setMouseCoord({ x: coord.x, y: coord.y });
+        });
+        chartOn('tip:update', (info: { x: number; y: number; index: number }) => {
+          const entry = fnLookup[info.index];
+          if (entry) {
+            setTraceInfo({ x: info.x, y: info.y, color: entry.color, expr: entry.expr });
+          }
+        });
+        chartOn('mouseout', () => {
+          setTraceInfo(null);
+        });
+      }
 
       try {
         const xScale = instance?.xScale as { domain: () => number[] } | undefined;
@@ -404,7 +478,6 @@ export default function GraphTab({ card }: Props) {
         const yDomain = yScale?.domain();
         if (xDomain && yDomain && xDomain.length === 2 && yDomain.length === 2) {
           const actualRange = { xMin: xDomain[0], xMax: xDomain[1], yMin: yDomain[0], yMax: yDomain[1] };
-          // 只在范围真正变化时才更新 state，避免无限循环
           const currentCached = rangeCache.get(card.id);
           if (!currentCached || 
               Math.abs(currentCached.xMin - actualRange.xMin) > 0.001 ||
@@ -418,13 +491,12 @@ export default function GraphTab({ card }: Props) {
         }
       } catch { /* ignore */ }
     } catch (e) {
-      setRenderError(e instanceof Error ? e.message : String(e));
-      containerRef.current.innerHTML = '';
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      console.error('绘图渲染失败:', errorMsg);
+      setRenderError(`绘图引擎错误: ${errorMsg}`);
     }
 
-    // Trigger polar grid refresh (happens after state update)
-    setRenderTick(t => t + 1);
-  }, [card.graphFunctions, card.id, readCurrentRange, setRenderTick]);
+  }, [card.graphFunctions, card.id, axisRange]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     cancelAnimationFrame(renderRef.current);
@@ -446,13 +518,6 @@ export default function GraphTab({ card }: Props) {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [renderPlot]);
-
-  // 监听函数列表和视图范围变化并触发重绘
-  useEffect(() => {
-    renderPlot();
-  }, [card.graphFunctions, card.id, axisRange, renderPlot]);
-
-  // function-plot 库已内置滚轮缩放和拖动功能，无需自定义事件处理器
 
   const animateToRange = useCallback((target: AxisRange) => {
     cancelAnimationFrame(animRef.current);
@@ -491,7 +556,6 @@ export default function GraphTab({ card }: Props) {
 
   const handleClear = () => {
     clearGraphFns(card.id);
-    // 立即清空容器中的 SVG
     if (containerRef.current) {
       containerRef.current.innerHTML = '';
     }
@@ -507,7 +571,6 @@ export default function GraphTab({ card }: Props) {
     const centerX = (current.xMin + current.xMax) / 2;
     const centerY = (current.yMin + current.yMax) / 2;
 
-    // 计算缩放因子，保持纵横比
     const factor = 0.75;
     const newXRange = (current.xMax - current.xMin) * factor;
     const newYRange = (current.yMax - current.yMin) * factor;
@@ -525,7 +588,6 @@ export default function GraphTab({ card }: Props) {
     const centerX = (current.xMin + current.xMax) / 2;
     const centerY = (current.yMin + current.yMax) / 2;
 
-    // 计算缩放因子，保持纵横比
     const factor = 1.35;
     const newXRange = (current.xMax - current.xMin) * factor;
     const newYRange = (current.yMax - current.yMin) * factor;
@@ -603,158 +665,6 @@ export default function GraphTab({ card }: Props) {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // function-plot 库已内置拖动功能，无需自定义事件处理器
-  // 但我们需要保留 traceMode 的坐标追踪功能
-  useEffect(() => {
-    const el = graphContainerRef.current;
-    if (!el) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const px = e.clientX - rect.left;
-      const py = e.clientY - rect.top;
-
-      const current = readCurrentRange();
-      const x = current.xMin + (px / rect.width) * (current.xMax - current.xMin);
-      const y = current.yMin + (1 - py / rect.height) * (current.yMax - current.yMin);
-      setMouseCoord({ x, y });
-
-      if (traceMode && card.graphFunctions.length > 0) {
-        const visibleFns = card.graphFunctions.filter((fn) => !fn.hidden);
-        let closest: { y: number; color: string; expr: string; dist: number } | null = null;
-        for (const fn of visibleFns) {
-          const parsed = parseExprForGraph(fn.expr);
-          const yVal = evalExpr(parsed, x);
-          if (yVal === null) continue;
-          const dist = Math.abs(yVal - y);
-          if (!closest || dist < closest.dist) {
-            closest = { y: yVal, color: fn.color, expr: fn.expr, dist };
-          }
-        }
-        if (closest && closest.dist < (current.yMax - current.yMin) * 0.1) {
-          setTraceInfo({ x, y: closest.y, color: closest.color, expr: closest.expr });
-        } else {
-          setTraceInfo(null);
-        }
-      }
-    };
-
-    const handleMouseLeave = () => {
-      setMouseCoord(null);
-      setTraceInfo(null);
-    };
-
-    el.addEventListener('mousemove', handleMouseMove);
-    el.addEventListener('mouseleave', handleMouseLeave);
-
-    return () => {
-      el.removeEventListener('mousemove', handleMouseMove);
-      el.removeEventListener('mouseleave', handleMouseLeave);
-    };
-  }, [readCurrentRange, card.id, traceMode]);
-
-  // Polar grid SVG overlay — reads current scales from fpInstanceRef
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el || !polarGrid) return;
-
-    // Read current domain from function-plot instance (tracks zoom/pan)
-    let xMin = -10, xMax = 10, yMin = -10, yMax = 10;
-    const inst = fpInstanceRef.current;
-    if (inst) {
-      const xs = (inst as any).xScale;
-      const ys = (inst as any).yScale;
-      if (xs?.domain) {
-        const d = xs.domain();
-        if (d && d.length === 2) { xMin = d[0]; xMax = d[1]; }
-      }
-      if (ys?.domain) {
-        const d = ys.domain();
-        if (d && d.length === 2) { yMin = d[0]; yMax = d[1]; }
-      }
-    }
-
-    let overlay = el.querySelector('.polar-grid-overlay') as SVGSVGElement | null;
-    if (!overlay) {
-      overlay = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      overlay.classList.add('polar-grid-overlay');
-      overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible';
-      el.appendChild(overlay);
-    }
-
-    const rect = el.getBoundingClientRect();
-    const w = rect.width;
-    const h = rect.height;
-
-    const originX = ((0 - xMin) / (xMax - xMin)) * w;
-    const originY = ((yMax - 0) / (yMax - yMin)) * h;
-
-    const ppuX = w / (xMax - xMin);
-    const ppuY = h / (yMax - yMin);
-    const ppu = Math.min(ppuX, ppuY);
-
-    const maxDataRadius = Math.min(
-      Math.abs(xMin), Math.abs(xMax),
-      Math.abs(yMin), Math.abs(yMax)
-    );
-    if (maxDataRadius < 0.1 || !isFinite(maxDataRadius)) {
-      overlay.innerHTML = '';
-      return;
-    }
-
-    overlay.innerHTML = '';
-
-    const rawStep = maxDataRadius / 5;
-    const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
-    let niceStep = magnitude;
-    if (rawStep / magnitude >= 5) niceStep = magnitude * 5;
-    else if (rawStep / magnitude >= 2) niceStep = magnitude * 2;
-    const numCircles = Math.floor(maxDataRadius / niceStep);
-    if (numCircles < 1) return;
-
-    for (let i = 1; i <= numCircles; i++) {
-      const dataR = niceStep * i;
-      const pixelR = dataR * ppu;
-      if (pixelR < 2) continue;
-      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      circle.setAttribute('cx', String(originX));
-      circle.setAttribute('cy', String(originY));
-      circle.setAttribute('r', String(pixelR));
-      circle.setAttribute('fill', 'none');
-      circle.setAttribute('stroke', 'rgba(107,112,148,0.15)');
-      circle.setAttribute('stroke-width', '1');
-      overlay.appendChild(circle);
-    }
-
-    const corners = [
-      [0 - originX, 0 - originY],
-      [w - originX, 0 - originY],
-      [0 - originX, h - originY],
-      [w - originX, h - originY],
-    ];
-    const maxPxDist = Math.sqrt(Math.max(...corners.map(([dx, dy]) => dx * dx + dy * dy)));
-
-    const numLines = 12;
-    for (let i = 0; i < numLines; i++) {
-      const angle = (Math.PI * 2 * i) / numLines;
-      const dx = maxPxDist * Math.cos(angle);
-      const dy = maxPxDist * Math.sin(angle);
-      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      line.setAttribute('x1', String(originX));
-      line.setAttribute('y1', String(originY));
-      line.setAttribute('x2', String(originX + dx));
-      line.setAttribute('y2', String(originY + dy));
-      line.setAttribute('stroke', 'rgba(107,112,148,0.15)');
-      line.setAttribute('stroke-width', '1');
-      overlay.appendChild(line);
-    }
-
-    return () => {
-      if (overlay && overlay.parentNode) overlay.remove();
-    };
-  }, [polarGrid, card.id, renderTick]);
-
   return (
     <div className="graph-tab">
       <div className="graph-toolbar">
@@ -807,10 +717,6 @@ export default function GraphTab({ card }: Props) {
         <button className="graph-add-btn" onClick={handleAdd}>添加</button>
         {card.graphFunctions.length > 0 && (
           <>
-            {card.graphFunctions.some(f => !f.hidden && f.fnType === 'linear') && (
-              <button className={`graph-tool-btn${traceMode ? ' active' : ''}`} onClick={() => { setTraceMode(!traceMode); setTraceInfo(null); }} title="追踪模式">⊕</button>
-            )}
-            <button className={`graph-tool-btn${polarGrid ? ' active' : ''}`} onClick={() => setPolarGrid(!polarGrid)} title="极坐标网格">{polarGrid ? '◉' : '○'}</button>
             <button className="graph-tool-btn" onClick={handleZoomIn} title="放大">＋</button>
             <button className="graph-tool-btn" onClick={handleZoomOut} title="缩小">－</button>
             <button className="graph-tool-btn" onClick={handleResetView} title="重置视图">⟲</button>
@@ -891,10 +797,10 @@ export default function GraphTab({ card }: Props) {
         )}
         {traceInfo && (
           <div className="graph-trace-display" style={{ borderColor: traceInfo.color }}>
-            <span style={{ color: traceInfo.color }}>●</span>
-            <span className="graph-trace-expr">{traceInfo.expr}</span>
-            <span className="graph-trace-val">({traceInfo.x.toFixed(3)}, {traceInfo.y.toFixed(3)})</span>
-          </div>
+              <span style={{ color: traceInfo.color }}>●</span>
+              <span className="graph-trace-expr">{traceInfo.expr}</span>
+              <span className="graph-trace-val">({traceInfo.x.toFixed(3)}, {traceInfo.y.toFixed(3)})</span>
+            </div>
         )}
       </div>
     </div>
