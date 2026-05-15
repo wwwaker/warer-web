@@ -202,19 +202,12 @@ function FnTag({ fn, cardId }: { fn: GraphFn; cardId: string }) {
           const newY = inner.slice(commaIdx + 1).trim();
           if (newX && newY && (newX !== fn.xExpr || newY !== fn.yExpr)) {
             updateGraphFn(cardId, fn.id, { expr: trimmed, xExpr: newX, yExpr: newY });
-            useCalculator.getState().addGraphHistory({
-              input: trimmed,
-              fnType: 'parametric',
-              expr: newX,
-              xExpr: newX,
-              yExpr: newY,
-              color: fn.color,
-            });
           }
           setEditing(false);
           return;
         }
       }
+      // If parsing fails, don't update — user can re-enter
       setEditing(false);
       return;
     }
@@ -222,12 +215,6 @@ function FnTag({ fn, cardId }: { fn: GraphFn; cardId: string }) {
     const cleaned = trimmed.replace(/^y\s*=\s*/i, '');
     if (cleaned && cleaned !== fn.expr) {
       updateGraphFn(cardId, fn.id, { expr: cleaned });
-      useCalculator.getState().addGraphHistory({
-        input: trimmed,
-        fnType: fn.fnType,
-        expr: cleaned,
-        color: fn.color,
-      });
     }
     setEditing(false);
   };
@@ -350,7 +337,6 @@ export default function GraphTab({ card }: Props) {
         const xScale = inst.xScale as { domain: () => number[] } | undefined;
         const yScale = inst.yScale as { domain: () => number[] } | undefined;
         
-        // 安全地调用 domain 方法
         let xDomain: number[] | undefined;
         let yDomain: number[] | undefined;
         
@@ -499,7 +485,6 @@ export default function GraphTab({ card }: Props) {
       
       fpInstanceRef.current = instance;
 
-      // 安全地添加事件监听器
       try {
         if (typeof (instance as Record<string, unknown>).on === 'function') {
           const chart = instance as Record<string, unknown>;
@@ -525,7 +510,6 @@ export default function GraphTab({ card }: Props) {
         const xScale = instance?.xScale as { domain: () => number[] } | undefined;
         const yScale = instance?.yScale as { domain: () => number[] } | undefined;
         
-        // 安全地调用 domain 方法
         let xDomain: number[] | undefined;
         let yDomain: number[] | undefined;
         
@@ -614,31 +598,13 @@ export default function GraphTab({ card }: Props) {
 
   const handleAdd = () => {
     if (!inputExpr.trim()) return;
-    const state = useCalculator.getState();
-    const fnCount = card.graphFunctions.length;
-    const nextColor = COLORS[fnCount % COLORS.length];
-
     if (inputMode === 'parametric') {
       if (!paramYExpr.trim()) return;
       addGraphFn(card.id, inputExpr, 'parametric', inputExpr, paramYExpr);
-      state.addGraphHistory({
-        input: `t(${inputExpr}, ${paramYExpr})`,
-        fnType: 'parametric',
-        expr: inputExpr,
-        xExpr: inputExpr,
-        yExpr: paramYExpr,
-        color: nextColor,
-      });
       setInputExpr('');
       setParamYExpr('');
     } else {
       addGraphFn(card.id, inputExpr, inputMode);
-      state.addGraphHistory({
-        input: inputExpr,
-        fnType: inputMode,
-        expr: inputExpr,
-        color: nextColor,
-      });
       setInputExpr('');
     }
   };
@@ -859,27 +825,10 @@ export default function GraphTab({ card }: Props) {
                   key={ex.label}
                   className="graph-example-btn"
                   onClick={() => {
-                    const state = useCalculator.getState();
-                    const fnCount = card.graphFunctions.length;
-                    const nextColor = COLORS[fnCount % COLORS.length];
                     if (inputMode === 'parametric' && ex.y) {
                       addGraphFn(card.id, ex.x, 'parametric', ex.x, ex.y);
-                      state.addGraphHistory({
-                        input: `t(${ex.x}, ${ex.y})`,
-                        fnType: 'parametric',
-                        expr: ex.x,
-                        xExpr: ex.x,
-                        yExpr: ex.y,
-                        color: nextColor,
-                      });
                     } else {
                       addGraphFn(card.id, ex.x, inputMode);
-                      state.addGraphHistory({
-                        input: ex.x,
-                        fnType: inputMode,
-                        expr: ex.x,
-                        color: nextColor,
-                      });
                     }
                   }}
                 >

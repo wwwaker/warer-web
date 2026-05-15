@@ -14,7 +14,7 @@ const KNOWN_FUNCS = new Set([
   'sinh', 'cosh', 'tanh',
   'ln', 'log', 'exp', 'sqrt',
   'abs', 'ceil', 'floor', 'round',
-  'diff', 'derivative', 'integrate', 'int', 'simplify',
+  'diff', 'derivative', 'integrate', 'int', 'simplify', 'solve',
 ]);
 
 function tokenize(input: string): Token[] {
@@ -41,6 +41,8 @@ function tokenize(input: string): Token[] {
         tokens.push({ type: 'func', value: name });
       } else if (name === 'pi') {
         tokens.push({ type: 'variable', value: '\\pi' });
+      } else if (name === 'theta') {
+        tokens.push({ type: 'variable', value: '\\theta' });
       } else if (name === 'i' || name === 'j') {
         tokens.push({ type: 'variable', value: 'i' });
       } else if (name === 'e' && (i >= s.length || !/[a-zA-Z]/.test(s[i]))) {
@@ -214,6 +216,16 @@ class Parser {
       };
 
       const latexName = funcLatex[funcName] || `\\operatorname{${funcName}}`;
+
+      if (funcName === 'solve') {
+        if (this.peek()?.type === 'lparen') {
+          this.advance();
+          const inner = this.parseExpression();
+          if (this.peek()?.type === 'rparen') this.advance();
+          return `${latexName}\\left(${inner}\\right)`;
+        }
+        return latexName;
+      }
 
       if (funcName === 'sqrt') {
         if (this.peek()?.type === 'lparen') {
