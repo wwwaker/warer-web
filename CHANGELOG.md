@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.2.2]
+
+### Features
+
+- **history**: 新增历史记录分类筛选（全部/计算/绘图），日期分组展示
+- **history**: 新增绘图历史记录，计算器📈绘图、绘图卡片添加/编辑函数时自动记录
+- **history**: 绘图历史条目显示颜色点、函数类型标记和表达式
+- **store**: 新增 `addGraphHistory` 和 `applyGraphFromHistory` 方法
+
+### Changed
+
+- **store**: 历史记录数据结构重构，条目包含 `type`（calculation/graph）和 `timestamp`
+- **store**: `navigateHistory` 过滤为仅计算条目，箭头键不跳绘图记录
+- **calculator**: `handlePlot` 重构，消除多个 return 路径
+- **graph**: 绘图卡片添加/编辑/示例函数时写入历史记录
+
+### Fixed
+
+- **graph**: 绘图操作此前不记入历史，现已修复
+
 ## [v0.2.1]
 
 ### Fixes

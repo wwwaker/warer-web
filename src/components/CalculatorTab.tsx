@@ -1,5 +1,5 @@
 import { useMemo, useRef, useCallback, useLayoutEffect, useState } from 'react';
-import { useCalculator, type Card } from '../store/calculatorStore';
+import { useCalculator, COLORS, type Card } from '../store/calculatorStore';
 import { detectGraphFnType } from '../engine/graphDetection';
 import KatexRenderer from './KatexRenderer';
 import { inputToLatex } from '../engine/latexPreview';
@@ -85,39 +85,39 @@ export default function CalculatorTab({ card }: Props) {
     if (!currentCol) return;
 
     const otherCols = columns.filter((col) => col.id !== currentCol.id);
+    let targetId: string | null = null;
 
     for (const col of otherCols) {
-      const activeCardInCol = cards.find((c) => c.id === col.activeCardId);
-      if (activeCardInCol && activeCardInCol.type === 'graph') {
-        addGraphFn(activeCardInCol.id, cleanExpr, targetFnType, detection.xExpr, detection.yExpr);
-        setActiveCard(activeCardInCol.id);
-        return;
+      const gc = cards.find((c) => c.id === col.activeCardId);
+      if (gc && gc.type === 'graph') { targetId = gc.id; break; }
+    }
+    if (!targetId) {
+      for (const col of otherCols) {
+        const gc = cards.find((c) => c.type === 'graph' && col.cardIds.includes(c.id));
+        if (gc) { targetId = gc.id; break; }
       }
     }
-
-    for (const col of otherCols) {
-      const graphCardInCol = cards.find(
-        (c) => c.type === 'graph' && col.cardIds.includes(c.id)
-      );
-      if (graphCardInCol) {
-        addGraphFn(graphCardInCol.id, cleanExpr, targetFnType, detection.xExpr, detection.yExpr);
-        setActiveCard(graphCardInCol.id);
-        return;
-      }
+    if (!targetId) {
+      const gc = cards.find((c) => c.type === 'graph' && currentCol.cardIds.includes(c.id));
+      if (gc) targetId = gc.id;
+    }
+    if (!targetId) {
+      targetId = state.addCard('graph', currentCol.id);
     }
 
-    const graphInCurrentCol = cards.find(
-      (c) => c.type === 'graph' && currentCol.cardIds.includes(c.id)
-    );
-    if (graphInCurrentCol) {
-      addGraphFn(graphInCurrentCol.id, cleanExpr, targetFnType, detection.xExpr, detection.yExpr);
-      setActiveCard(graphInCurrentCol.id);
-      return;
-    }
+    const fnCount = cards.find(c => c.id === targetId)?.graphFunctions.length ?? 0;
+    const nextColor = COLORS[fnCount % COLORS.length];
 
-    const newId = useCalculator.getState().addCard('graph', currentCol.id);
-    addGraphFn(newId, cleanExpr, targetFnType, detection.xExpr, detection.yExpr);
-    setActiveCard(newId);
+    addGraphFn(targetId, cleanExpr, targetFnType, detection.xExpr, detection.yExpr);
+    state.addGraphHistory({
+      input: rawExpr,
+      fnType: targetFnType,
+      expr: cleanExpr,
+      xExpr: detection.xExpr,
+      yExpr: detection.yExpr,
+      color: nextColor,
+    });
+    setActiveCard(targetId);
   };
 
   const errorPosition = card.output?.error && card.output.errorPosition != null ? card.output.errorPosition : null;

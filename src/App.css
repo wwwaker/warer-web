@@ -375,6 +375,47 @@ body {
 .history-search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
 .history-search-input::placeholder { color: var(--text-dim); }
 
+/* ===== History Filter ===== */
+.history-toolbar { gap: 6px; flex-wrap: wrap; }
+.history-filter-group { display: flex; flex-shrink: 0; }
+.history-filter-btn {
+  padding: 3px 10px; border: 1px solid var(--border); background: var(--surface);
+  color: var(--text-dim); font-size: 11px; font-weight: 500; cursor: pointer;
+  transition: all var(--transition);
+}
+.history-filter-btn:first-child { border-radius: var(--radius-xs) 0 0 var(--radius-xs); }
+.history-filter-btn:last-child { border-radius: 0 var(--radius-xs) var(--radius-xs) 0; }
+.history-filter-btn:not(:last-child) { border-right: none; }
+.history-filter-btn:hover { background: var(--surface-hover); color: var(--text-secondary); }
+.history-filter-btn.active { background: var(--accent-light); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+
+/* ===== History Item Badges ===== */
+.history-full-input { display: flex; align-items: center; gap: 4px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+.history-item-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 4px;
+  font-size: 10px; font-weight: 700; flex-shrink: 0;
+}
+.history-item-badge.calc { background: var(--accent-light); color: var(--accent); }
+.history-item-badge.graph { background: var(--cloud-light); color: var(--cloud); }
+
+/* ===== Graph History Meta ===== */
+.history-graph-meta {
+  display: flex; align-items: center; gap: 6px; margin-top: 2px;
+}
+.history-graph-color-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.history-graph-expr {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-secondary);
+}
+
+/* ===== Date Group Headers ===== */
+.history-date-header {
+  font-size: 10px; font-weight: 600; color: var(--text-dim);
+  padding: 8px 4px 2px; letter-spacing: 0.5px;
+}
+
 /* ===== Fullscreen & Responsive ===== */
 .app.fullscreen .app-header { display: none; }
 

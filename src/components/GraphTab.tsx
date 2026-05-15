@@ -202,12 +202,19 @@ function FnTag({ fn, cardId }: { fn: GraphFn; cardId: string }) {
           const newY = inner.slice(commaIdx + 1).trim();
           if (newX && newY && (newX !== fn.xExpr || newY !== fn.yExpr)) {
             updateGraphFn(cardId, fn.id, { expr: trimmed, xExpr: newX, yExpr: newY });
+            useCalculator.getState().addGraphHistory({
+              input: trimmed,
+              fnType: 'parametric',
+              expr: newX,
+              xExpr: newX,
+              yExpr: newY,
+              color: fn.color,
+            });
           }
           setEditing(false);
           return;
         }
       }
-      // If parsing fails, don't update — user can re-enter
       setEditing(false);
       return;
     }
@@ -215,6 +222,12 @@ function FnTag({ fn, cardId }: { fn: GraphFn; cardId: string }) {
     const cleaned = trimmed.replace(/^y\s*=\s*/i, '');
     if (cleaned && cleaned !== fn.expr) {
       updateGraphFn(cardId, fn.id, { expr: cleaned });
+      useCalculator.getState().addGraphHistory({
+        input: trimmed,
+        fnType: fn.fnType,
+        expr: cleaned,
+        color: fn.color,
+      });
     }
     setEditing(false);
   };
@@ -336,12 +349,33 @@ export default function GraphTab({ card }: Props) {
         const inst = fpInstanceRef.current;
         const xScale = inst.xScale as { domain: () => number[] } | undefined;
         const yScale = inst.yScale as { domain: () => number[] } | undefined;
-        const xDomain = xScale?.domain();
-        const yDomain = yScale?.domain();
+        
+        // 安全地调用 domain 方法
+        let xDomain: number[] | undefined;
+        let yDomain: number[] | undefined;
+        
+        if (xScale && typeof xScale.domain === 'function') {
+          try {
+            xDomain = xScale.domain();
+          } catch (e) {
+            console.warn('读取当前范围时获取 x 轴范围失败:', e);
+          }
+        }
+        
+        if (yScale && typeof yScale.domain === 'function') {
+          try {
+            yDomain = yScale.domain();
+          } catch (e) {
+            console.warn('读取当前范围时获取 y 轴范围失败:', e);
+          }
+        }
+        
         if (xDomain && yDomain && xDomain.length === 2 && yDomain.length === 2) {
           return { xMin: xDomain[0], xMax: xDomain[1], yMin: yDomain[0], yMax: yDomain[1] };
         }
-      } catch { /* fallback */ }
+      } catch (e) {
+        console.warn('读取当前范围失败:', e);
+      }
     }
     return rangeRef.current;
   }, []);
@@ -420,8 +454,12 @@ export default function GraphTab({ card }: Props) {
 
     try {
       const prev = fpInstanceRef.current as Record<string, unknown> | null;
-      if (prev && typeof (prev as Record<string, unknown>).removeAllListeners === 'function') {
-        ((prev as Record<string, unknown>).removeAllListeners as () => void)();
+      if (prev && typeof prev.removeAllListeners === 'function') {
+        try {
+          (prev.removeAllListeners as () => void)();
+        } catch (e) {
+          console.warn('移除旧事件监听器失败:', e);
+        }
       }
 
       const validData = data.filter((d) => {
@@ -452,30 +490,61 @@ export default function GraphTab({ card }: Props) {
         disableZoom: false,
         tip: { xLine: false, yLine: false },
       }) as Record<string, unknown> | undefined;
-      fpInstanceRef.current = instance ?? null;
+      
+      if (!instance) {
+        console.error('绘图引擎初始化失败');
+        setRenderError('绘图引擎初始化失败');
+        return;
+      }
+      
+      fpInstanceRef.current = instance;
 
-      if (instance && typeof (instance as Record<string, unknown>).on === 'function') {
-        const chart = instance as Record<string, unknown>;
-        const chartOn = chart.on as (event: string, handler: (...args: never[]) => void) => void;
-        chartOn('before:mousemove', (coord: { x: number; y: number }) => {
-          setMouseCoord({ x: coord.x, y: coord.y });
-        });
-        chartOn('tip:update', (info: { x: number; y: number; index: number }) => {
-          const entry = fnLookup[info.index];
-          if (entry) {
-            setTraceInfo({ x: info.x, y: info.y, color: entry.color, expr: entry.expr });
-          }
-        });
-        chartOn('mouseout', () => {
-          setTraceInfo(null);
-        });
+      // 安全地添加事件监听器
+      try {
+        if (typeof (instance as Record<string, unknown>).on === 'function') {
+          const chart = instance as Record<string, unknown>;
+          const chartOn = chart.on as (event: string, handler: (...args: never[]) => void) => void;
+          chartOn('before:mousemove', (coord: { x: number; y: number }) => {
+            setMouseCoord({ x: coord.x, y: coord.y });
+          });
+          chartOn('tip:update', (info: { x: number; y: number; index: number }) => {
+            const entry = fnLookup[info.index];
+            if (entry) {
+              setTraceInfo({ x: info.x, y: info.y, color: entry.color, expr: entry.expr });
+            }
+          });
+          chartOn('mouseout', () => {
+            setTraceInfo(null);
+          });
+        }
+      } catch (e) {
+        console.warn('设置图表事件监听器失败:', e);
       }
 
       try {
         const xScale = instance?.xScale as { domain: () => number[] } | undefined;
         const yScale = instance?.yScale as { domain: () => number[] } | undefined;
-        const xDomain = xScale?.domain();
-        const yDomain = yScale?.domain();
+        
+        // 安全地调用 domain 方法
+        let xDomain: number[] | undefined;
+        let yDomain: number[] | undefined;
+        
+        if (xScale && typeof xScale.domain === 'function') {
+          try {
+            xDomain = xScale.domain();
+          } catch (e) {
+            console.warn('获取 x 轴范围失败:', e);
+          }
+        }
+        
+        if (yScale && typeof yScale.domain === 'function') {
+          try {
+            yDomain = yScale.domain();
+          } catch (e) {
+            console.warn('获取 y 轴范围失败:', e);
+          }
+        }
+        
         if (xDomain && yDomain && xDomain.length === 2 && yDomain.length === 2) {
           const actualRange = { xMin: xDomain[0], xMax: xDomain[1], yMin: yDomain[0], yMax: yDomain[1] };
           const currentCached = rangeCache.get(card.id);
@@ -489,7 +558,9 @@ export default function GraphTab({ card }: Props) {
             setAxisRange(actualRange);
           }
         }
-      } catch { /* ignore */ }
+      } catch (e) {
+        console.warn('读取图表范围失败:', e);
+      }
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       console.error('绘图渲染失败:', errorMsg);
@@ -543,13 +614,31 @@ export default function GraphTab({ card }: Props) {
 
   const handleAdd = () => {
     if (!inputExpr.trim()) return;
+    const state = useCalculator.getState();
+    const fnCount = card.graphFunctions.length;
+    const nextColor = COLORS[fnCount % COLORS.length];
+
     if (inputMode === 'parametric') {
       if (!paramYExpr.trim()) return;
       addGraphFn(card.id, inputExpr, 'parametric', inputExpr, paramYExpr);
+      state.addGraphHistory({
+        input: `t(${inputExpr}, ${paramYExpr})`,
+        fnType: 'parametric',
+        expr: inputExpr,
+        xExpr: inputExpr,
+        yExpr: paramYExpr,
+        color: nextColor,
+      });
       setInputExpr('');
       setParamYExpr('');
     } else {
       addGraphFn(card.id, inputExpr, inputMode);
+      state.addGraphHistory({
+        input: inputExpr,
+        fnType: inputMode,
+        expr: inputExpr,
+        color: nextColor,
+      });
       setInputExpr('');
     }
   };
@@ -770,10 +859,27 @@ export default function GraphTab({ card }: Props) {
                   key={ex.label}
                   className="graph-example-btn"
                   onClick={() => {
+                    const state = useCalculator.getState();
+                    const fnCount = card.graphFunctions.length;
+                    const nextColor = COLORS[fnCount % COLORS.length];
                     if (inputMode === 'parametric' && ex.y) {
                       addGraphFn(card.id, ex.x, 'parametric', ex.x, ex.y);
+                      state.addGraphHistory({
+                        input: `t(${ex.x}, ${ex.y})`,
+                        fnType: 'parametric',
+                        expr: ex.x,
+                        xExpr: ex.x,
+                        yExpr: ex.y,
+                        color: nextColor,
+                      });
                     } else {
                       addGraphFn(card.id, ex.x, inputMode);
+                      state.addGraphHistory({
+                        input: ex.x,
+                        fnType: inputMode,
+                        expr: ex.x,
+                        color: nextColor,
+                      });
                     }
                   }}
                 >

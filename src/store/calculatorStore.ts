@@ -15,6 +15,26 @@ export interface GraphFn {
   hidden: boolean;
 }
 
+export interface CalculationHistoryEntry {
+  type: 'calculation';
+  input: string;
+  output: ComputeOutput;
+  timestamp: number;
+}
+
+export interface GraphHistoryEntry {
+  type: 'graph';
+  input: string;
+  fnType: GraphMode;
+  expr: string;
+  xExpr: string;
+  yExpr: string;
+  color: string;
+  timestamp: number;
+}
+
+export type HistoryEntry = CalculationHistoryEntry | GraphHistoryEntry;
+
 export interface Card {
   id: string;
   type: CardType;
@@ -79,7 +99,7 @@ interface CalculatorState {
   cards: Card[];
   columns: Column[];
   activeCardId: string | null;
-  history: { input: string; output: ComputeOutput }[];
+  history: HistoryEntry[];
   historyIndex: number | null;
   isFullscreen: boolean;
   dragState: { cardId: string; fromColumnId: string } | null;
@@ -105,8 +125,10 @@ interface CalculatorState {
   toggleGraphFnVisibility: (cardId: string, fnId: string) => void;
   toggleFullscreen: () => void;
   clearHistory: () => void;
-  loadHistoryItem: (input: string) => void;
+  loadHistoryItem: (entry: HistoryEntry) => void;
   navigateHistory: (direction: 'prev' | 'next') => void;
+  addGraphHistory: (params: { input: string; fnType: GraphMode; expr: string; xExpr?: string; yExpr?: string; color: string }) => void;
+  applyGraphFromHistory: (entry: GraphHistoryEntry) => void;
   setDragState: (s: { cardId: string; fromColumnId: string } | null) => void;
   setCursorPosition: (pos: number | null) => void;
   getFirstCalcCard: () => Card | undefined;
@@ -370,7 +392,7 @@ export const useCalculator = create<CalculatorState>((set, get) => ({
       cards: s.cards.map((c) =>
         c.id === id ? { ...c, output, computing: false } : c
       ),
-      history: [...s.history, { input: card.input, output }],
+      history: [...s.history, { type: 'calculation' as const, input: card.input, output, timestamp: Date.now() }],
       historyIndex: null,
     }));
   },
@@ -428,44 +450,51 @@ export const useCalculator = create<CalculatorState>((set, get) => ({
 
   clearHistory: () => set({ history: [] }),
 
-  loadHistoryItem: (input) => {
-    const { cards, activeCardId, columns } = get();
-
-    const currentCol = columns.find((c) => c.cardIds.includes(activeCardId || ''));
-    const active = cards.find((c) => c.id === activeCardId);
-    
-    if (active && active.type === 'calculator' && currentCol) {
-      set((s) => ({
-        cards: s.cards.map((c) =>
-          c.id === activeCardId ? { ...c, input, output: null } : c
-        ),
-      }));
-    } else {
-      const targetColId = currentCol?.id || columns[0]?.id;
-      if (targetColId) {
-        const id = get().addCard('calculator', targetColId);
+  loadHistoryItem: (entry) => {
+    if (entry.type === 'calculation') {
+      const { cards, activeCardId, columns } = get();
+      const currentCol = columns.find((c) => c.cardIds.includes(activeCardId || ''));
+      const active = cards.find((c) => c.id === activeCardId);
+      if (active && active.type === 'calculator' && currentCol) {
         set((s) => ({
           cards: s.cards.map((c) =>
-            c.id === id ? { ...c, input } : c
+            c.id === activeCardId ? { ...c, input: entry.input, output: null } : c
           ),
         }));
+      } else {
+        const targetColId = currentCol?.id || columns[0]?.id;
+        if (targetColId) {
+          const id = get().addCard('calculator', targetColId);
+          set((s) => ({
+            cards: s.cards.map((c) =>
+              c.id === id ? { ...c, input: entry.input } : c
+            ),
+          }));
+        }
       }
+    } else {
+      get().applyGraphFromHistory(entry);
     }
   },
 
   navigateHistory: (direction) => {
     const { history, historyIndex, cards, activeCardId } = get();
     const active = cards.find((c) => c.id === activeCardId);
-    if (!active || active.type !== 'calculator' || history.length === 0) return;
+    if (!active || active.type !== 'calculator') return;
+
+    const calcHistory = history.filter(
+      (e): e is CalculationHistoryEntry => e.type === 'calculation'
+    );
+    if (calcHistory.length === 0) return;
 
     let newIndex: number | null;
     if (direction === 'prev') {
-      newIndex = historyIndex === null ? history.length - 1 : Math.max(0, historyIndex - 1);
+      newIndex = historyIndex === null ? calcHistory.length - 1 : Math.max(0, historyIndex - 1);
     } else {
-      newIndex = historyIndex === null ? null : (historyIndex < history.length - 1 ? historyIndex + 1 : null);
+      newIndex = historyIndex === null ? null : (historyIndex < calcHistory.length - 1 ? historyIndex + 1 : null);
     }
 
-    const item = newIndex !== null ? history[newIndex] : null;
+    const item = newIndex !== null ? calcHistory[newIndex] : null;
     set((s) => ({
       historyIndex: newIndex,
       cards: s.cards.map((c) =>
@@ -477,6 +506,42 @@ export const useCalculator = create<CalculatorState>((set, get) => ({
   setDragState: (s) => set({ dragState: s }),
 
   setCursorPosition: (pos) => set({ cursorPosition: pos }),
+
+  addGraphHistory: (params) => {
+    set((s) => ({
+      history: [...s.history, {
+        type: 'graph',
+        input: params.input,
+        fnType: params.fnType,
+        expr: params.expr,
+        xExpr: params.xExpr ?? '',
+        yExpr: params.yExpr ?? '',
+        color: params.color,
+        timestamp: Date.now(),
+      }],
+    }));
+  },
+
+  applyGraphFromHistory: (entry) => {
+    const { cards, columns, setActiveCard } = get();
+    const currentCol = columns[0];
+    if (!currentCol) return;
+
+    // Try to find an existing graph card across all columns first
+    for (const col of columns) {
+      const graphCard = cards.find((c) => c.type === 'graph' && col.cardIds.includes(c.id));
+      if (graphCard) {
+        get().addGraphFn(graphCard.id, entry.expr, entry.fnType, entry.xExpr, entry.yExpr);
+        setActiveCard(graphCard.id);
+        return;
+      }
+    }
+
+    // Fallback: create a new graph card in the first column
+    const newId = get().addCard('graph', currentCol.id);
+    get().addGraphFn(newId, entry.expr, entry.fnType, entry.xExpr, entry.yExpr);
+    setActiveCard(newId);
+  },
 
   getFirstCalcCard: () => get().cards.find((c) => c.type === 'calculator'),
 
