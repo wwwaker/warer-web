@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.2.3]
+
+### Docs
+
+- **docs**: 完善README文档，新增功能预览图片
+- **start**: 添加启动脚本
+
+### Fixed
+
+- **latex**：修复几个LaTeX渲染问题
+
 ## [v0.2.2]
 
 ### Features
