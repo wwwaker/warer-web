@@ -331,7 +331,7 @@ export const useCalculator = create<CalculatorState>((set, get) => ({
         const before = input.slice(0, pos);
         const after = input.slice(pos);
 
-        const FUNC_SUFFIXES = ['sin(', 'cos(', 'tan(', 'ln(', 'log(', 'exp(', 'sqrt(', 'abs(', 'asin(', 'acos(', 'atan(', 'sinh(', 'cosh(', 'tanh(', 'diff(', 'integrate(', 'simplify('];
+        const FUNC_SUFFIXES = ['sin(', 'cos(', 'tan(', 'ln(', 'log(', 'exp(', 'sqrt(', 'abs(', 'asin(', 'acos(', 'atan(', 'sinh(', 'cosh(', 'tanh(', 'diff(', 'integrate(', 'simplify(', 'solve(', 'nsolve(', 'dsolve(', 'linsolve(', 'limit(', 'series(', 'taylor('];
         for (const suffix of FUNC_SUFFIXES) {
           if (before.endsWith(suffix)) {
             const openCount = (input.match(/\(/g) || []).length;

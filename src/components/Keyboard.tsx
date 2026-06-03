@@ -15,23 +15,24 @@ const KEYS: { label: string; value: string; span?: number; cls?: string }[][] = 
     { label: '8', value: '8' },
     { label: '9', value: '9' },
     { label: '÷', value: '/' },
-    { label: '^', value: '^' },
-    { label: 'π', value: 'pi' },
+    { label: 'x²', value: '^2' },
+    { label: '√', value: 'sqrt(' },
+    
   ],
   [
     { label: '4', value: '4' },
     { label: '5', value: '5' },
     { label: '6', value: '6' },
     { label: '×', value: '*' },
-    { label: '(', value: '(' },
-    { label: ')', value: ')' },
+    { label: '|x|', value: 'abs(' },
+    { label: '^', value: '^' },
   ],
   [
     { label: '1', value: '1' },
     { label: '2', value: '2' },
     { label: '3', value: '3' },
     { label: '−', value: '-' },
-    { label: '√', value: 'sqrt(' },
+    { label: 'π', value: 'pi' },
     { label: 'e', value: 'e' },
   ],
   [
@@ -39,15 +40,15 @@ const KEYS: { label: string; value: string; span?: number; cls?: string }[][] = 
     { label: '.', value: '.' },
     { label: ',', value: ',' },
     { label: '+', value: '+' },
-    { label: '=', value: 'COMPUTE', cls: 'accent', span: 2 },
+    { label: '(', value: '(' },
+    { label: ')', value: ')' },
   ],
   [
-    { label: 'diff', value: 'diff(', cls: 'cloud' },
-    { label: 'int', value: 'integrate(', cls: 'cloud' },
     { label: 'θ', value: 'theta', cls: 'cloud' },
     { label: 'x', value: 'x', cls: 'cloud' },
     { label: 'y', value: 'y', cls: 'cloud' },
     { label: 't', value: 't', cls: 'cloud' },
+    { label: '=', value: 'COMPUTE', cls: 'accent', span: 2 },
   ],
 ];
 

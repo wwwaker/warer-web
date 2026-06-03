@@ -1,8 +1,9 @@
-import { useMemo, useRef, useCallback, useLayoutEffect, useState } from 'react';
+import { useMemo, useRef, useCallback, useLayoutEffect } from 'react';
 import { useCalculator, COLORS, type Card } from '../store/calculatorStore';
 import { detectGraphFnType } from '../engine/graphDetection';
 import KatexRenderer from './KatexRenderer';
 import { inputToLatex } from '../engine/latexPreview';
+import FunctionPanel from './FunctionPanel';
 
 function checkBracketMismatch(input: string): { fixed: string; hint: string } | null {
   if (!input) return null;
@@ -33,19 +34,9 @@ interface Props {
 }
 
 export default function CalculatorTab({ card }: Props) {
-  const { setInput, compute, addGraphFn, cursorPosition, setCursorPosition, navigateHistory } = useCalculator();
+  const { setInput, compute, addGraphFn, cursorPosition, setCursorPosition, navigateHistory, appendInput } = useCalculator();
   const inputRef = useRef<HTMLInputElement>(null);
   const prevCursorRef = useRef<number | null>(null);
-  const [showTemplates, setShowTemplates] = useState(false);
-
-  const TEMPLATES = [
-    { label: '求根', expr: 'solve(x^2 - 4, x)', desc: '解一元二次方程' },
-    { label: '求导', expr: 'diff(x^3 + 2*x, x)', desc: '计算多项式导数' },
-    { label: '积分', expr: 'integrate(x^2, x)', desc: '计算不定积分' },
-    { label: '化简', expr: 'simplify(cos(x)^2 + sin(x)^2)', desc: '三角恒等式化简' },
-    { label: '解方程', expr: 'solve(x^2 - 3*x + 2, x)', desc: '因式分解求根' },
-    { label: '对数求导', expr: 'diff(ln(x), x)', desc: '自然对数求导' },
-  ];
 
   const syncCursor = useCallback(() => {
     const el = inputRef.current;
@@ -177,33 +168,10 @@ export default function CalculatorTab({ card }: Props) {
         )}
       </div>
 
-      <div className="template-panel">
-        <button
-          className="template-toggle"
-          onClick={() => setShowTemplates(!showTemplates)}
-        >
-          <span className="template-toggle-icon">{showTemplates ? '▼' : '▶'}</span>
-          常用模板
-        </button>
-        {showTemplates && (
-          <div className="template-grid">
-            {TEMPLATES.map((t) => (
-              <button
-                key={t.expr}
-                className="template-btn"
-                title={t.desc}
-                onClick={() => {
-                  setInput(card.id, t.expr);
-                  setShowTemplates(false);
-                }}
-              >
-                <span className="template-label">{t.label}</span>
-                <span className="template-desc">{t.desc}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      <FunctionPanel
+        onInsert={(value) => appendInput(card.id, value, cursorPosition)}
+        onTemplate={(expr) => setInput(card.id, expr)}
+      />
 
       <div className="calc-body">
         <div className="calc-body-left">

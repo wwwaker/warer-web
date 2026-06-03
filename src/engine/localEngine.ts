@@ -6,7 +6,7 @@ export interface LocalResult {
   is_symbolic: false;
 }
 
-const CLOUD_KEYWORDS = /\b(diff|derivative|int|integrate|solve|simplify|limit|series|matrix)\b/i;
+const CLOUD_KEYWORDS = /\b(diff|derivative|int|integrate|solve|nsolve|dsolve|linsolve|limit|series|taylor|simplify|matrix)\b/i;
 const SYMBOLIC_VAR = /\b([a-zA-Z])\b(?!\s*\()/;
 
 const LOCAL_CONSTANTS = new Set(['e', 'pi', 'E', 'PI']);
