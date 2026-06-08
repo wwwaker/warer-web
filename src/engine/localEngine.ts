@@ -6,7 +6,7 @@ export interface LocalResult {
   is_symbolic: false;
 }
 
-const CLOUD_KEYWORDS = /\b(diff|derivative|int|integrate|solve|nsolve|dsolve|linsolve|limit|series|taylor|simplify|matrix)\b/i;
+const CLOUD_KEYWORDS = /\b(diff|derivative|int|integrate|solve|nsolve|dsolve|linsolve|limit|series|taylor|simplify|matrix|det|inv|transpose|eigenvals|eigenvects|rank|inverse)\b/i;
 const SYMBOLIC_VAR = /\b([a-zA-Z])\b(?!\s*\()/;
 
 const LOCAL_CONSTANTS = new Set(['e', 'pi', 'E', 'PI']);
@@ -73,6 +73,8 @@ function smartRound(value: number, tolerance: number = 1e-10): string {
 
 export function needsCloud(input: string): boolean {
   if (CLOUD_KEYWORDS.test(input)) return true;
+  // Matrix literals should go to cloud for proper LaTeX display
+  if (/\[\[.+?\]\]/.test(input)) return true;
   if (SYMBOLIC_VAR.test(input)) {
     const withoutFuncs = input.replace(/\b(sin|cos|tan|log|ln|exp|sqrt|abs|asin|acos|atan|sinh|cosh|tanh|ceil|floor|round)\b/gi, '');
     const matches = withoutFuncs.match(/\b([a-zA-Z])\b(?!\s*\()/g);
@@ -152,6 +154,17 @@ export function computeLocal(input: string): LocalResult | null {
       return {
         numeric_value: result,
         plain_text: roundedText,
+        is_symbolic: false,
+      };
+    }
+
+    // Handle matrix results from mathjs
+    if (result && typeof result === 'object' && 'toArray' in result && typeof (result as any).toArray === 'function') {
+      const arr = (result as any).toArray();
+      const plainText = JSON.stringify(arr);
+      return {
+        numeric_value: null,
+        plain_text: plainText,
         is_symbolic: false,
       };
     }

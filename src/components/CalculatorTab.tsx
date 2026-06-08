@@ -188,14 +188,34 @@ export default function CalculatorTab({ card }: Props) {
           <div className="section-label">计算结果</div>
           <div className="result-box">
             {card.computing && <div className="computing">计算中...</div>}
-            {!card.computing && card.output?.error && (
-              <div className="result-error" onClick={errorPosition !== null ? handleErrorClick : undefined}>
-                {card.output.error}
-                {errorPosition !== null && (
-                  <span className="error-position-hint"> (位置 {errorPosition}，点击定位)</span>
-                )}
-              </div>
-            )}
+            {!card.computing && card.output?.error && (() => {
+              // 解析错误类型: "MathError: ..." 或 "SyntaxError: ..." 格式
+              const errStr = card.output.error;
+              const colonIdx = errStr.indexOf(':');
+              const errType = colonIdx > 0 ? errStr.slice(0, colonIdx) : null;
+              const errMsg = colonIdx > 0 ? errStr.slice(colonIdx + 1).trim() : errStr;
+              const errIcon =
+                errType === 'MathError' ? '⚠️' :
+                errType === 'SyntaxError' ? '✏️' :
+                errType === 'TimeoutError' ? '⏱' :
+                errType === 'NetworkError' ? '🔌' : '❌';
+              const errTypeClass = errType ? `error-type-${errType.toLowerCase().replace(/error$/, '')}` : '';
+              return (
+                <div
+                  className={`result-error ${errTypeClass}`}
+                  onClick={errorPosition !== null ? handleErrorClick : undefined}
+                >
+                  <div className="result-error-header">
+                    <span className="result-error-icon">{errIcon}</span>
+                    {errType && <span className="result-error-type">{errType}</span>}
+                    {errorPosition !== null && (
+                      <span className="error-position-hint">位置 {errorPosition}</span>
+                    )}
+                  </div>
+                  <div className="result-error-message">{errMsg}</div>
+                </div>
+              );
+            })()}
             {!card.computing && card.output && !card.output.error && (
               <>
                 <div className="result-badge">

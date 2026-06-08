@@ -47,6 +47,18 @@ const FN_GROUPS: FnGroup[] = [
       { label: 'simplify', value: 'simplify(' },
     ],
   },
+  {
+    title: '矩阵运算',
+    defaultOpen: false,
+    items: [
+      { label: 'det', value: 'det(' },
+      { label: 'inv', value: 'inv(' },
+      { label: 'transpose', value: 'transpose(' },
+      { label: 'eigenvals', value: 'eigenvals(' },
+      { label: 'eigenvects', value: 'eigenvects(' },
+      { label: 'rank', value: 'rank(' },
+    ],
+  },
 ];
 
 interface TemplateItem {
@@ -59,6 +71,7 @@ interface TemplateItem {
 const TEMPLATES: TemplateItem[] = [
   { label: '求导', expr: 'diff(x^3 + 2*x, x)', desc: '计算多项式导数', group: '微积分' },
   { label: '积分', expr: 'integrate(x^2, x)', desc: '计算不定积分', group: '微积分' },
+  { label: '定积分', expr: 'integrate(x^2, x, 0, 1)', desc: '计算定积分', group: '微积分' },
   { label: '求根', expr: 'solve(x^2 - 4, x)', desc: '解一元二次方程', group: '方程' },
   { label: '数值求根', expr: 'nsolve(x^5-x-1, x, 1)', desc: '数值方法求根', group: '方程' },
   { label: '方程组', expr: 'linsolve([x+y-1, x-y-3], [x, y])', desc: '解线性方程组', group: '方程' },
@@ -66,6 +79,12 @@ const TEMPLATES: TemplateItem[] = [
   { label: '极限', expr: 'limit(sin(x)/x, x, 0)', desc: '计算极限', group: '分析' },
   { label: '泰勒展开', expr: 'series(sin(x), x, 0, 5)', desc: '泰勒级数展开', group: '分析' },
   { label: '化简', expr: 'simplify(cos(x)^2 + sin(x)^2)', desc: '三角恒等式化简', group: '化简' },
+  { label: '2x2 矩阵', expr: '[[1, 2], [3, 4]]', desc: '2×2 矩阵', group: '矩阵' },
+  { label: '3x3 矩阵', expr: '[[1, 2, 3], [4, 5, 6], [7, 8, 9]]', desc: '3×3 矩阵', group: '矩阵' },
+  { label: '行列式', expr: 'det([[1, 2], [3, 4]])', desc: '计算矩阵行列式', group: '矩阵' },
+  { label: '逆矩阵', expr: 'inv([[1, 2], [3, 4]])', desc: '求逆矩阵', group: '矩阵' },
+  { label: '特征值', expr: 'eigenvals([[1, 2], [3, 4]])', desc: '计算特征值', group: '矩阵' },
+  { label: '转置', expr: 'transpose([[1, 2], [3, 4]])', desc: '矩阵转置', group: '矩阵' },
 ];
 
 type PanelTab = 'fn' | 'tpl';
